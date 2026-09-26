@@ -1,9 +1,9 @@
-name: platform
+name: tenants
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/suaterenler/platform:latest}
-    container_name: platform-app
+    image: ${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}
+    container_name: tenants-app
     restart: unless-stopped
     network_mode: host
     healthcheck:

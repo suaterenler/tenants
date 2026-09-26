@@ -1,4 +1,4 @@
-# PLATFORM — Erenler Yönetim
+# TENANTS — Erenler Kurum Yönetimi
 
 Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten uygulama. DB yok; her program kendi kurum listesini tutar, bu uygulama onların agent API'sini çağırır.
 
@@ -18,8 +18,8 @@ Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten u
 - Her değişiklikten sonra `npx tsc --noEmit` + `npm run lint`
 
 ## Yayın
-- master'a push → GitHub Actions → `ghcr.io/suaterenler/platform`
-- Sunucu: `/home/erenler/app.erenleryazilim.com/platform/` (compose, .env, update.sh; cron 2 dk). Container host network, 127.0.0.1:3050
+- master'a push → GitHub Actions → `ghcr.io/suaterenler/tenants`
+- Sunucu: `/home/erenler/app.erenleryazilim.com/tenants/` (compose, .env, update.sh; cron 2 dk). Container host network, 127.0.0.1:3050
 - `PLATFORM_SECRET` Education `.env` ile aynı olmalı
 
 <!-- BEGIN:nextjs-agent-rules -->

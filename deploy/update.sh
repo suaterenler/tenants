@@ -3,9 +3,9 @@ set -eu
 
 cd "$(dirname "$0")"
 
-before=$(docker image inspect --format '{{.Id}}' "${APP_IMAGE:-ghcr.io/suaterenler/platform:latest}" 2>/dev/null || true)
+before=$(docker image inspect --format '{{.Id}}' "${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}" 2>/dev/null || true)
 docker compose pull -q app
-after=$(docker image inspect --format '{{.Id}}' "${APP_IMAGE:-ghcr.io/suaterenler/platform:latest}")
+after=$(docker image inspect --format '{{.Id}}' "${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}")
 
 if [ "$before" != "$after" ] || [ "${1:-}" = "--force" ]; then
   echo "$(date '+%F %T') yeni imaj: $after"
