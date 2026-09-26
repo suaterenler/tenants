@@ -1,0 +1,24 @@
+name: platform
+
+services:
+  app:
+    image: ${APP_IMAGE:-ghcr.io/suaterenler/platform:latest}
+    container_name: platform-app
+    restart: unless-stopped
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${PORT}/admin"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    environment:
+      HOSTNAME: 127.0.0.1
+      PORT: ${APP_PORT:-3050}
+      PLATFORM_PASSWORD: ${PLATFORM_PASSWORD:?PLATFORM_PASSWORD zorunlu}
+      PLATFORM_SECRET: ${PLATFORM_SECRET:?PLATFORM_SECRET zorunlu}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
+      EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3043/education}
+      SALON_URL: ${SALON_URL:-http://127.0.0.1:3044/salon}
+      TRUST_PROXY: "1"
+      NODE_ENV: production
