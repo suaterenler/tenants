@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Building2, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, KeyRound, Loader2, LogOut, Pencil, Plus, RefreshCw, Search } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Copy, Database, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, LogOut, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate } from "@/lib/format";
+import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
 const BASE_PATH = "/admin";
 const TOKEN_KEY = "erenler_platform_token";
@@ -41,6 +41,8 @@ type Tenant = {
   disabledModules: string[];
   createdAt: string;
 };
+type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
+type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type Overview = { apps: AppInfo[]; rows: Tenant[]; total: number; page: number; pageCount: number; pageSize: number; today: string };
 type Secret = { title: string; tenant: Tenant; password: string };
 type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[] };
@@ -247,6 +249,27 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
+function UsageCell({ row }: { row: UsageRow | null }) {
+  const { messages: t, locale } = useI18n();
+  if (!row) return <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>;
+  const db = row.dbBytes ?? 0;
+  return (
+    <TableCell className="text-right text-sm tabular-nums" title={`${t.platform.database}: ${row.dbBytes === null ? "—" : formatBytes(db, locale)} · ${t.platform.files}: ${formatBytes(row.uploadBytes, locale)}`}>
+      <div className="font-medium">{formatBytes(db + row.uploadBytes, locale)}</div>
+      <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1" title={t.platform.database}>
+          <Database className="size-3" />
+          {row.dbBytes === null ? "—" : formatBytes(db, locale)}
+        </span>
+        <span className="inline-flex items-center gap-1" title={t.platform.files}>
+          <FolderOpen className="size-3" />
+          {formatBytes(row.uploadBytes, locale)}
+        </span>
+      </div>
+    </TableCell>
+  );
+}
+
 function PasswordReset({ token, onDone }: { token: string; onDone: () => void }) {
   const t = useI18n().messages;
   const [password, setPassword] = useState("");
@@ -309,6 +332,11 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [saving, setSaving] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
   const [tab, setTab] = useState("general");
+  const [usage, setUsage] = useState<UsageResult | null>(null);
+  const [deleting, setDeleting] = useState<Tenant | null>(null);
+  const [deleteCode, setDeleteCode] = useState("");
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [calculating, setCalculating] = useState(false);
   const today = overview.today;
 
   const handleError = useCallback(
@@ -361,6 +389,43 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  function askDelete(tenant: Tenant) {
+    setDialogOpen(false);
+    setDeleteCode("");
+    setDeleting(tenant);
+  }
+
+  async function confirmDelete() {
+    if (!deleting || deleteCode !== deleting.slug) return;
+    setDeleteBusy(true);
+    try {
+      await platformFetch<{ deleted: boolean }>(`/tenants/${deleting.app}/${deleting.slug}`, { method: "DELETE" });
+      toast.success(t.platform.deleted.replace("{name}", deleting.name));
+      setDeleting(null);
+      setUsage(null);
+      await load();
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function calculateUsage() {
+    setCalculating(true);
+    try {
+      setUsage(await platformFetch<UsageResult>("/tenants/usage"));
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setCalculating(false);
+    }
+  }
+
+  const usageOf = (tenant: Tenant) => usage?.rows.find((row) => row.app === tenant.app && row.slug === tenant.slug) ?? null;
+  const usageTotal = usage ? usage.rows.reduce((sum, row) => sum + (row.dbBytes ?? 0) + row.uploadBytes, 0) : 0;
+  const columnCount = usage ? 7 : 6;
 
   async function exportExcel() {
     setExporting(true);
@@ -515,6 +580,10 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <Button variant="outline" size="icon" onClick={() => void load()} aria-label={t.platform.refresh} title={t.platform.refresh}>
             <RefreshCw className="size-4" />
           </Button>
+          <Button variant="outline" onClick={() => void calculateUsage()} disabled={calculating || overview.total === 0}>
+            {calculating ? <Loader2 className="size-4 animate-spin" /> : <HardDrive className="size-4" />}
+            {t.platform.calculateUsage}
+          </Button>
           <Button variant="outline" onClick={() => void exportExcel()} disabled={exporting || overview.total === 0}>
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
             {t.platform.export}
@@ -533,6 +602,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <TableHead>{t.platform.name}</TableHead>
                   <TableHead>{t.platform.contact}</TableHead>
                   <TableHead>{t.platform.expiresAt}</TableHead>
+                  {usage ? <TableHead className="text-right">{t.platform.size}</TableHead> : null}
                   <TableHead className="w-24">{t.platform.status}</TableHead>
                   <TableHead className="w-24" />
                 </TableRow>
@@ -540,13 +610,13 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center">
+                    <TableCell colSpan={columnCount} className="py-8 text-center">
                       <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                    <TableCell colSpan={columnCount} className="py-8 text-center text-muted-foreground">
                       {t.platform.empty}
                     </TableCell>
                   </TableRow>
@@ -576,6 +646,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                             <span className="text-muted-foreground">{t.platform.noExpiry}</span>
                           )}
                         </TableCell>
+                        {usage ? <UsageCell row={usageOf(tenant)} /> : null}
                         <TableCell>
                           <Switch checked={tenant.active} onCheckedChange={(next) => void toggleActive(tenant, next)} aria-label={t.platform.status} />
                         </TableCell>
@@ -586,6 +657,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                             </Button>
                             <Button variant="ghost" size="icon-sm" aria-label={t.platform.edit} title={t.platform.edit} onClick={() => openEdit(tenant)}>
                               <Pencil className="size-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={t.platform.delete} title={tenant.active ? t.platform.deleteNeedsPassive : t.platform.delete} disabled={tenant.active} onClick={() => askDelete(tenant)}>
+                              <Trash2 className="size-4" />
                             </Button>
                           </div>
                         </TableCell>
@@ -598,7 +672,10 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           </CardContent>
         </Card>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>{t.platform.total.replace("{count}", String(overview.total))}</span>
+          <span>
+            {t.platform.total.replace("{count}", String(overview.total))}
+            {usage ? ` · ${t.platform.totalSize.replace("{size}", formatBytes(usageTotal, locale))} · ${t.platform.calculatedAt.replace("{time}", formatDateTime(usage.calculatedAt, locale))}` : ""}
+          </span>
           <div className={overview.total > PAGE_SIZES[0] ? "flex items-center gap-2" : "hidden"}>
             <span>{t.platform.pageSize}</span>
             <div className="w-20">
@@ -722,10 +799,16 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           </form>
           <DialogFooter className="sm:justify-between">
             {editing ? (
-              <Button type="button" variant="outline" onClick={() => void resetAdmin(editing)} disabled={saving}>
-                <KeyRound className="size-4" />
-                {t.platform.resetAdmin}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" onClick={() => void resetAdmin(editing)} disabled={saving}>
+                  <KeyRound className="size-4" />
+                  {t.platform.resetAdmin}
+                </Button>
+                <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => askDelete(editing)} disabled={saving || editing.active} title={editing.active ? t.platform.deleteNeedsPassive : undefined}>
+                  <Trash2 className="size-4" />
+                  {t.platform.delete}
+                </Button>
+              </div>
             ) : (
               <span />
             )}
@@ -738,6 +821,36 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                 {editing ? t.common.save : t.platform.create}
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleting !== null} onOpenChange={(open) => (open || deleteBusy ? undefined : setDeleting(null))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-destructive">{t.platform.deleteTitle}</DialogTitle>
+          </DialogHeader>
+          {deleting ? (
+            <form id="delete-form" onSubmit={(event) => { event.preventDefault(); void confirmDelete(); }} className="flex flex-col gap-3 text-sm">
+              <p>{t.platform.deleteWarning.replace("{name}", deleting.name).replace("{program}", appName(deleting.app))}</p>
+              <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>{t.platform.deleteDatabase}</li>
+                <li>{t.platform.deleteFiles}</li>
+                <li>{t.platform.deleteRecord}</li>
+              </ul>
+              <Field label={t.platform.deleteTypeCode.replace("{code}", deleting.slug)} htmlFor="delete-code" required>
+                <Input id="delete-code" value={deleteCode} onChange={(e) => setDeleteCode(e.target.value.trim())} autoComplete="off" autoFocus disabled={deleteBusy} />
+              </Field>
+            </form>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setDeleting(null)} disabled={deleteBusy}>
+              {t.common.cancel}
+            </Button>
+            <Button type="submit" form="delete-form" variant="destructive" disabled={deleteBusy || !deleting || deleteCode !== deleting.slug}>
+              {deleteBusy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
+              {t.platform.deletePermanently}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

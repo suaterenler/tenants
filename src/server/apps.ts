@@ -62,7 +62,7 @@ export async function agentCall<T>(app: PlatformApp, path: string, init: { metho
   }
   const payload = (await response.json().catch(() => null)) as AgentBody<T> | null;
   if (!payload) throw new AgentError("platformAppUnavailable", `HTTP ${response.status}`, 502);
-  if (!payload.ok) throw new AgentError(payload.code ?? "platformAppUnavailable", payload.error, response.status);
+  if (!payload.ok) throw new AgentError((payload.code ?? "platformAppUnavailable").replace(/^errors./, ""), payload.error, response.status);
   return payload.data;
 }
 
