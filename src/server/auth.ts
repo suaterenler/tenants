@@ -6,7 +6,7 @@ import { credentialVersion } from "./credentials";
 
 const AUDIENCE = "erenler-platform";
 const RESET_AUDIENCE = "erenler-platform-reset";
-const RESET_MINUTES = 30;
+const RESET_MINUTES = 10;
 const TOKEN_HOURS = 8;
 const DEV_SECRET = "platform-dev-secret-only-for-local-development";
 

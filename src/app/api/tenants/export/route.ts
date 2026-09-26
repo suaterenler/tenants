@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       [t.expiresAt]: displayDate(tenant.expiresAt),
       [t.status]: isExpired(tenant, today) ? t.expired : tenant.active ? t.active : t.passive,
       [t.createdAt]: tenant.createdAt.startsWith("1970") ? "" : displayDate(tenant.createdAt),
-      [t.address]: `${origin}${app?.publicPath ?? `/${tenant.app}`}/${tenant.slug}`,
+      [t.address]: `${(app?.publicUrl ?? `${origin}${app?.publicPath ?? `/${tenant.app}`}`).replace(/\/+$/, "")}/${tenant.slug}`,
     };
   });
   const sheet = XLSX.utils.json_to_sheet(rows);

@@ -12,14 +12,14 @@ export type TenantRecord = {
   disabledModules: string[];
   createdAt: string;
 };
-export type PlatformApp = { key: string; name: string; publicPath: string; agentUrl: string };
-export type PlatformAppInfo = { key: string; name: string; publicPath: string; online: boolean; modules: PlatformModule[] };
+export type PlatformApp = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string };
+export type PlatformAppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: PlatformModule[] };
 export type PlatformTenant = TenantRecord & { app: string };
 
 export function platformApps(): PlatformApp[] {
   return [
-    { key: "education", name: "Education", publicPath: "/education", agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education" },
-    { key: "salon", name: "Salon", publicPath: "/salon", agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon" },
+    { key: "education", name: "Education", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education" },
+    { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon" },
   ];
 }
 
@@ -71,11 +71,24 @@ export async function overview(): Promise<{ apps: PlatformAppInfo[]; tenants: Pl
     platformApps().map(async (app) => {
       try {
         const [records, modules] = await Promise.all([agentCall<TenantRecord[]>(app, "/tenants"), agentCall<PlatformModule[]>(app, "/modules")]);
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, online: true, modules }, tenants: records.map((record) => ({ ...record, app: app.key })) };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: true, modules }, tenants: records.map((record) => ({ ...record, app: app.key })) };
       } catch {
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, online: false, modules: [] }, tenants: [] };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: false, modules: [] }, tenants: [] };
       }
     }),
   );
   return { apps: results.map((result) => result.info), tenants: results.flatMap((result) => result.tenants) };
+}
+
+export async function agentStream(app: PlatformApp, path: string, timeoutMs = 30 * 60 * 1000): Promise<Response> {
+  try {
+    return await fetch(`${app.agentUrl}/admin/api/agent${path}`, {
+      headers: { Authorization: `Bearer ${platformSecret()}` },
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof AgentError) throw error;
+    throw new AgentError("platformAppUnavailable", "unreachable", 502);
+  }
 }

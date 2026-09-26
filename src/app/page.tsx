@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Building2, ChevronLeft, ChevronRight, Copy, Database, Download, ExternalLink, FolderOpen, HardDrive, KeyRound, Loader2, LogOut, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, HardDrive, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
 const BASE_PATH = "/admin";
@@ -28,7 +29,7 @@ const PAGE_SIZES = [25, 50, 100];
 const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
 type PlatformModule = { key: string; label: string };
-type AppInfo = { key: string; name: string; publicPath: string; online: boolean; modules: PlatformModule[] };
+type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: PlatformModule[] };
 type Tenant = {
   app: string;
   slug: string;
@@ -112,9 +113,10 @@ async function platformFetch<T>(path: string, init: { method?: string; body?: un
 }
 
 function tenantAddress(apps: AppInfo[], app: string, slug: string): string {
+  const info = apps.find((item) => item.key === app);
+  if (info?.publicUrl) return `${info.publicUrl.replace(/\/+$/, "")}/${slug}`;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
-  const publicPath = apps.find((item) => item.key === app)?.publicPath ?? `/${app}`;
-  return `${origin}${publicPath}/${slug}`;
+  return `${origin}${info?.publicPath ?? `/${app}`}/${slug}`;
 }
 
 function isExpired(tenant: Tenant, today: string): boolean {
@@ -249,6 +251,16 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
+function DisabledReason({ reason, children }: { reason: string | null; children: ReactNode }) {
+  if (!reason) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<span className="inline-flex cursor-not-allowed" tabIndex={0} aria-label={reason} />}>{children}</TooltipTrigger>
+      <TooltipContent>{reason}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function UsageCell({ row }: { row: UsageRow | null }) {
   const { messages: t, locale } = useI18n();
   if (!row) return <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>;
@@ -336,6 +348,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [deleting, setDeleting] = useState<Tenant | null>(null);
   const [deleteCode, setDeleteCode] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [mailTo, setMailTo] = useState("");
+  const [mailing, setMailing] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const today = overview.today;
 
@@ -389,6 +404,24 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [search]);
+
+  async function confirmBackup(tenant: Tenant, kind: "database" | "files") {
+    const message = (kind === "database" ? t.platform.backupDatabaseConfirm : t.platform.backupFilesConfirm).replace("{name}", tenant.name);
+    const ok = await confirm({ message, confirmText: t.platform.download });
+    if (ok) await downloadBackup(tenant, kind);
+  }
+
+  async function downloadBackup(tenant: Tenant, kind: "database" | "files") {
+    setDownloading(`${tenant.app}:${tenant.slug}:${kind}`);
+    try {
+      await platformDownload(`/tenants/${tenant.app}/${tenant.slug}/backup/${kind}`, `${tenant.app}_${tenant.slug}-${kind}.zip`);
+      toast.success(t.platform.backupReady);
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   function askDelete(tenant: Tenant) {
     setDialogOpen(false);
@@ -499,7 +532,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       } else {
         const result = await platformFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug } });
         setDialogOpen(false);
-        setSecret({ title: t.platform.created, tenant: result.tenant, password: result.adminPassword });
+        showSecret({ title: t.platform.created, tenant: result.tenant, password: result.adminPassword });
       }
       await load();
     } catch (error) {
@@ -527,10 +560,36 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     try {
       const result = await platformFetch<{ password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: {} });
       setDialogOpen(false);
-      setSecret({ title: t.platform.passwordReset, tenant, password: result.password });
+      showSecret({ title: t.platform.passwordReset, tenant, password: result.password });
     } catch (error) {
       handleError(error);
     }
+  }
+
+  function showSecret(value: Secret) {
+    setMailTo(value.tenant.email ?? "");
+    setSecret(value);
+  }
+
+  async function mailCredentials() {
+    if (!secret || !mailTo.trim()) return;
+    setMailing(true);
+    try {
+      const result = await platformFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password } });
+      toast.success(t.platform.credentialsSent.replace("{email}", result.sentTo));
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setMailing(false);
+    }
+  }
+
+  function secretRows(value: Secret): { label: string; value: string; link: boolean }[] {
+    return [
+      { label: t.platform.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug), link: true },
+      { label: t.platform.adminUser, value: "admin", link: false },
+      { label: t.platform.adminPassword, value: value.password, link: false },
+    ];
   }
 
   async function copy(value: string) {
@@ -604,7 +663,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <TableHead>{t.platform.expiresAt}</TableHead>
                   {usage ? <TableHead className="text-right">{t.platform.size}</TableHead> : null}
                   <TableHead className="w-24">{t.platform.status}</TableHead>
-                  <TableHead className="w-24" />
+                  <TableHead className="w-48" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -655,12 +714,20 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                             <Button variant="ghost" size="icon-sm" aria-label={t.platform.open} title={t.platform.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug)} target="_blank" rel="noreferrer" />}>
                               <ExternalLink className="size-4" />
                             </Button>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.downloadDatabase} title={t.platform.downloadDatabase} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "database")}>
+                              {downloading === `${tenant.app}:${tenant.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <DatabaseArrowDown className="size-4" />}
+                            </Button>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.downloadFiles} title={t.platform.downloadFiles} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "files")}>
+                              {downloading === `${tenant.app}:${tenant.slug}:files` ? <Loader2 className="size-4 animate-spin" /> : <FolderDown className="size-4" />}
+                            </Button>
                             <Button variant="ghost" size="icon-sm" aria-label={t.platform.edit} title={t.platform.edit} onClick={() => openEdit(tenant)}>
                               <Pencil className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={t.platform.delete} title={tenant.active ? t.platform.deleteNeedsPassive : t.platform.delete} disabled={tenant.active} onClick={() => askDelete(tenant)}>
-                              <Trash2 className="size-4" />
-                            </Button>
+                            <DisabledReason reason={tenant.active ? t.platform.deleteNeedsPassive : null}>
+                              <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={t.platform.delete} title={tenant.active ? undefined : t.platform.delete} disabled={tenant.active} onClick={() => askDelete(tenant)}>
+                                <Trash2 className="size-4" />
+                              </Button>
+                            </DisabledReason>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -706,6 +773,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   {t.platform.modules}
                   {form.disabledModules.length > 0 ? <Badge variant="secondary">{form.disabledModules.length}</Badge> : null}
                 </TabsTrigger>
+                {editing ? <TabsTrigger value="backup">{t.platform.backup}</TabsTrigger> : null}
               </TabsList>
               <TabsContent value="general" className="min-h-72">
                 <section className="grid gap-4 sm:grid-cols-2">
@@ -788,6 +856,37 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   )}
                 </section>
               </TabsContent>
+              {editing ? (
+                <TabsContent value="backup" className="min-h-72">
+                  <section className="flex flex-col gap-4">
+                    <p className="text-sm text-muted-foreground">{t.platform.backupHint}</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-3 rounded-lg border p-4">
+                        <div className="flex items-center gap-2 font-medium">
+                          <Database className="size-4" />
+                          {t.platform.database}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{t.platform.backupDatabaseHint}</p>
+                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "database")} disabled={downloading !== null}>
+                          {downloading === `${editing.app}:${editing.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
+                          {t.platform.downloadDatabase}
+                        </Button>
+                      </div>
+                      <div className="flex flex-col gap-3 rounded-lg border p-4">
+                        <div className="flex items-center gap-2 font-medium">
+                          <FolderOpen className="size-4" />
+                          {t.platform.files}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{t.platform.backupFilesHint}</p>
+                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "files")} disabled={downloading !== null}>
+                          {downloading === `${editing.app}:${editing.slug}:files` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
+                          {t.platform.downloadFiles}
+                        </Button>
+                      </div>
+                    </div>
+                  </section>
+                </TabsContent>
+              ) : null}
             </Tabs>
 
             {saving && !editing ? (
@@ -804,10 +903,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <KeyRound className="size-4" />
                   {t.platform.resetAdmin}
                 </Button>
-                <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => askDelete(editing)} disabled={saving || editing.active} title={editing.active ? t.platform.deleteNeedsPassive : undefined}>
-                  <Trash2 className="size-4" />
-                  {t.platform.delete}
-                </Button>
+                <DisabledReason reason={editing.active ? t.platform.deleteNeedsPassive : null}>
+                  <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => askDelete(editing)} disabled={saving || editing.active}>
+                    <Trash2 className="size-4" />
+                    {t.platform.delete}
+                  </Button>
+                </DisabledReason>
               </div>
             ) : (
               <span />
@@ -863,24 +964,48 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           {secret ? (
             <div className="flex flex-col gap-3 text-sm">
               <p className="text-muted-foreground">{t.platform.createdHint}</p>
-              {[
-                { label: t.platform.address, value: tenantAddress(overview.apps, secret.tenant.app, secret.tenant.slug) },
-                { label: t.platform.adminUser, value: "admin" },
-                { label: t.platform.adminPassword, value: secret.password },
-              ].map((row) => (
+              {secretRows(secret).map((row) => (
                 <div key={row.label} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
                   <div className="min-w-0">
                     <div className="text-xs text-muted-foreground">{row.label}</div>
                     <div className="break-all font-mono">{row.value}</div>
                   </div>
-                  <Button variant="ghost" size="icon-sm" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(row.value)}>
-                    <Copy className="size-4" />
-                  </Button>
+                  <div className="flex shrink-0 gap-1">
+                    {row.link ? (
+                      <Button variant="ghost" size="icon-sm" aria-label={t.platform.open} title={t.platform.open} render={<a href={row.value} target="_blank" rel="noreferrer" />}>
+                        <ExternalLink className="size-4" />
+                      </Button>
+                    ) : null}
+                    <Button variant="ghost" size="icon-sm" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(row.value)}>
+                      <Copy className="size-4" />
+                    </Button>
+                  </div>
                 </div>
               ))}
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void mailCredentials();
+                }}
+                className="flex flex-col gap-2 rounded-md border border-dashed p-3"
+              >
+                <Field label={t.platform.sendTo} htmlFor="credentials-mail" hint={secret.tenant.email ? undefined : t.platform.sendToHint}>
+                  <div className="flex gap-2">
+                    <Input id="credentials-mail" type="email" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder="ornek@kurum.com" disabled={mailing} />
+                    <Button type="submit" variant="outline" disabled={mailing || !mailTo.trim()}>
+                      {mailing ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
+                      {t.platform.sendMail}
+                    </Button>
+                  </div>
+                </Field>
+              </form>
             </div>
           ) : null}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
+            <Button variant="outline" onClick={() => (secret ? void copy(secretRows(secret).map((row) => `${row.label}: ${row.value}`).join("\n")) : undefined)}>
+              <Copy className="size-4" />
+              {t.platform.copyAll}
+            </Button>
             <Button onClick={() => setSecret(null)}>{t.common.ok}</Button>
           </DialogFooter>
         </DialogContent>
