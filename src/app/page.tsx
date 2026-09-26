@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/format";
 
 const BASE_PATH = "/admin";
@@ -307,6 +308,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
+  const [tab, setTab] = useState("general");
   const today = overview.today;
 
   const handleError = useCallback(
@@ -380,12 +382,14 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   function openCreate() {
     const firstOnline = overview.apps.find((app) => app.online)?.key ?? "education";
     setEditing(null);
+    setTab("general");
     setForm({ ...EMPTY_FORM, app: appFilter || firstOnline });
     setDialogOpen(true);
   }
 
   function openEdit(tenant: Tenant) {
     setEditing(tenant);
+    setTab("general");
     setForm({
       app: tenant.app,
       slug: tenant.slug,
@@ -616,84 +620,98 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <DialogHeader>
             <DialogTitle>{editing ? `${t.platform.editTenant} · ${editing.name}` : t.platform.newTenant}</DialogTitle>
           </DialogHeader>
-          <form id="tenant-form" onSubmit={(event) => void handleSave(event)} className="flex max-h-[65vh] flex-col gap-5 overflow-y-auto pr-1">
-            <section className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.platform.program} required>
-                <OptionSelect
-                  value={form.app}
-                  onChange={(value) => patch({ app: value, disabledModules: [] })}
-                  options={overview.apps.filter((app) => app.online).map((app) => ({ value: app.key, label: app.name }))}
-                  ariaLabel={t.platform.program}
-                  disabled={editing !== null || saving}
-                />
-              </Field>
-              <Field label={t.platform.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.platform.slugHint}>
-                <Input id="tenant-slug" value={form.slug} onChange={(e) => patch({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} disabled={editing !== null || saving} maxLength={40} />
-              </Field>
-              <div className={editing ? undefined : "sm:col-span-2"}>
-                <Field label={t.platform.name} htmlFor="tenant-name" required>
-                  <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
-                </Field>
-              </div>
-              {editing ? (
-                <Field label={t.platform.status}>
-                  <label className="flex h-9 items-center justify-between gap-2 rounded-md border px-3 text-sm">
-                    <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.platform.active : t.platform.passive}</span>
-                    <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
-                  </label>
-                </Field>
-              ) : null}
-              {form.slug ? (
-                <div className="flex items-center gap-1 sm:col-span-2">
-                  {editing ? (
-                    <a href={tenantAddress(overview.apps, form.app, form.slug)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
-                      <ExternalLink className="size-3 shrink-0" />
-                      {tenantAddress(overview.apps, form.app, form.slug)}
-                    </a>
-                  ) : (
-                    <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
-                  )}
-                  <Button type="button" variant="ghost" size="icon-xs" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug))}>
-                    <Copy className="size-3" />
-                  </Button>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="grid gap-4 sm:grid-cols-2">
-              <h3 className="text-sm font-semibold sm:col-span-2">{t.platform.contact}</h3>
-              <Field label={t.platform.contactName} htmlFor="tenant-contact">
-                <Input id="tenant-contact" value={form.contactName} onChange={(e) => patch({ contactName: e.target.value })} disabled={saving} />
-              </Field>
-              <Field label={t.platform.phone}>
-                <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
-              </Field>
-              <Field label={t.platform.email} htmlFor="tenant-email">
-                <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
-              </Field>
-              <Field label={t.platform.expiresAt}>
-                <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
-              </Field>
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold">{t.platform.modules}</h3>
-              {formApp && formApp.modules.length > 0 ? (
-                <>
-                  <p className="text-xs text-muted-foreground">{t.platform.modulesHint}</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {formApp.modules.map((module) => (
-                      <label key={module.key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
-                        {module.label}
-                        <Switch checked={!form.disabledModules.includes(module.key)} onCheckedChange={(enabled) => toggleModule(module.key, enabled)} disabled={saving} />
-                      </label>
-                    ))}
+          <form id="tenant-form" onSubmit={(event) => void handleSave(event)} className="flex flex-col gap-4">
+            <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-4">
+              <TabsList>
+                <TabsTrigger value="general">{t.platform.general}</TabsTrigger>
+                <TabsTrigger value="contact">{t.platform.contact}</TabsTrigger>
+                <TabsTrigger value="modules">
+                  {t.platform.modules}
+                  {form.disabledModules.length > 0 ? <Badge variant="secondary">{form.disabledModules.length}</Badge> : null}
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="general" className="min-h-72">
+                <section className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t.platform.program} required>
+                    <OptionSelect
+                      value={form.app}
+                      onChange={(value) => patch({ app: value, disabledModules: [] })}
+                      options={overview.apps.filter((app) => app.online).map((app) => ({ value: app.key, label: app.name }))}
+                      ariaLabel={t.platform.program}
+                      disabled={editing !== null || saving}
+                    />
+                  </Field>
+                  <Field label={t.platform.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.platform.slugHint}>
+                    <Input id="tenant-slug" value={form.slug} onChange={(e) => patch({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} disabled={editing !== null || saving} maxLength={40} />
+                  </Field>
+                  <div className={editing ? undefined : "sm:col-span-2"}>
+                    <Field label={t.platform.name} htmlFor="tenant-name" required>
+                      <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
+                    </Field>
                   </div>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">{t.platform.modulesUnavailable}</p>
-              )}
-            </section>
+                  {editing ? (
+                    <Field label={t.platform.status}>
+                      <label className="flex h-9 items-center justify-between gap-2 rounded-md border px-3 text-sm">
+                        <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.platform.active : t.platform.passive}</span>
+                        <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
+                      </label>
+                    </Field>
+                  ) : null}
+                  {form.slug ? (
+                    <div className="flex items-center gap-1 sm:col-span-2">
+                      {editing ? (
+                        <a href={tenantAddress(overview.apps, form.app, form.slug)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
+                          <ExternalLink className="size-3 shrink-0" />
+                          {tenantAddress(overview.apps, form.app, form.slug)}
+                        </a>
+                      ) : (
+                        <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
+                      )}
+                      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug))}>
+                        <Copy className="size-3" />
+                      </Button>
+                    </div>
+                  ) : null}
+                </section>
+              </TabsContent>
+
+              <TabsContent value="contact" className="min-h-72">
+                <section className="grid gap-4 sm:grid-cols-2">
+                  <Field label={t.platform.contactName} htmlFor="tenant-contact">
+                    <Input id="tenant-contact" value={form.contactName} onChange={(e) => patch({ contactName: e.target.value })} disabled={saving} />
+                  </Field>
+                  <Field label={t.platform.phone}>
+                    <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
+                  </Field>
+                  <Field label={t.platform.email} htmlFor="tenant-email">
+                    <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
+                  </Field>
+                  <Field label={t.platform.expiresAt}>
+                    <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
+                  </Field>
+                </section>
+              </TabsContent>
+
+              <TabsContent value="modules" className="min-h-72">
+                <section className="flex max-h-[55vh] flex-col gap-2 overflow-y-auto pr-1">
+                  {formApp && formApp.modules.length > 0 ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">{t.platform.modulesHint}</p>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {formApp.modules.map((module) => (
+                          <label key={module.key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
+                            {module.label}
+                            <Switch checked={!form.disabledModules.includes(module.key)} onCheckedChange={(enabled) => toggleModule(module.key, enabled)} disabled={saving} />
+                          </label>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">{t.platform.modulesUnavailable}</p>
+                  )}
+                </section>
+              </TabsContent>
+            </Tabs>
 
             {saving && !editing ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
