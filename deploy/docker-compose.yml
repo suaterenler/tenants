@@ -12,6 +12,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    volumes:
+      - data:/app/data
     environment:
       HOSTNAME: 127.0.0.1
       PORT: ${APP_PORT:-3050}
@@ -20,5 +22,16 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
       EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3043/education}
       SALON_URL: ${SALON_URL:-http://127.0.0.1:3044/salon}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-suaterenler@gmail.com}
+      PUBLIC_URL: ${PUBLIC_URL:-https://app.erenleryazilim.com}
+      MAIL_FROM: ${MAIL_FROM:-Erenler Yönetim <noreply@erenleryazilim.com>}
+      SMTP_HOST: ${SMTP_HOST:-127.0.0.1}
+      SMTP_PORT: ${SMTP_PORT:-25}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      DATA_DIR: /app/data
       TRUST_PROXY: "1"
       NODE_ENV: production
+
+volumes:
+  data:

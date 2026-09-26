@@ -1,10 +1,12 @@
 import "server-only";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { jwtVerify, SignJWT } from "jose";
 import { NextResponse } from "next/server";
 import { tr } from "@messages/tr";
+import { credentialVersion } from "./credentials";
 
 const AUDIENCE = "erenler-platform";
+const RESET_AUDIENCE = "erenler-platform-reset";
+const RESET_MINUTES = 30;
 const TOKEN_HOURS = 8;
 const DEV_SECRET = "platform-dev-secret-only-for-local-development";
 
@@ -14,19 +16,9 @@ function secret(): Uint8Array {
   return new TextEncoder().encode(value || DEV_SECRET);
 }
 
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value).digest();
-}
-
-export function checkPassword(candidate: string): boolean {
-  const expected = process.env.PLATFORM_PASSWORD?.trim();
-  if (!expected) return false;
-  return timingSafeEqual(digest(candidate), digest(expected));
-}
-
 export async function signToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ scope: "platform" })
+  return new SignJWT({ scope: "platform", ver: await credentialVersion() })
     .setProtectedHeader({ alg: "HS256" })
     .setAudience(AUDIENCE)
     .setIssuedAt(now)
@@ -37,7 +29,26 @@ export async function signToken(): Promise<string> {
 async function verifyToken(token: string): Promise<boolean> {
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"], audience: AUDIENCE });
-    return payload.scope === "platform";
+    return payload.scope === "platform" && payload.ver === (await credentialVersion());
+  } catch {
+    return false;
+  }
+}
+
+export async function signResetToken(): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  return new SignJWT({ scope: "reset", ver: await credentialVersion() })
+    .setProtectedHeader({ alg: "HS256" })
+    .setAudience(RESET_AUDIENCE)
+    .setIssuedAt(now)
+    .setExpirationTime(now + RESET_MINUTES * 60)
+    .sign(secret());
+}
+
+export async function verifyResetToken(token: string): Promise<boolean> {
+  try {
+    const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"], audience: RESET_AUDIENCE });
+    return payload.scope === "reset" && payload.ver === (await credentialVersion());
   } catch {
     return false;
   }
@@ -70,9 +81,9 @@ export async function readBody(request: Request): Promise<Record<string, unknown
 
 const attempts = new Map<string, number[]>();
 
-export function rateLimited(request: Request, max = 5, windowMs = 10 * 60 * 1000): boolean {
+export function rateLimited(request: Request, max = 5, windowMs = 10 * 60 * 1000, scope = "login"): boolean {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",").pop()?.trim();
-  const key = forwarded || "direct";
+  const key = `${scope}:${forwarded || "direct"}`;
   const now = Date.now();
   const hits = (attempts.get(key) ?? []).filter((time) => now - time < windowMs);
   if (hits.length >= max) {
@@ -84,7 +95,7 @@ export function rateLimited(request: Request, max = 5, windowMs = 10 * 60 * 1000
   return false;
 }
 
-export function clearRate(request: Request): void {
+export function clearRate(request: Request, scope = "login"): void {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",").pop()?.trim();
-  attempts.delete(forwarded || "direct");
+  attempts.delete(`${scope}:${forwarded || "direct"}`);
 }

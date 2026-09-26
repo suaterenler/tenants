@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
-import { Building2, Copy, ExternalLink, KeyRound, Loader2, LogOut, Pencil, Plus, RefreshCw, Search } from "lucide-react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { Building2, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, KeyRound, Loader2, LogOut, Pencil, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -20,11 +20,11 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatDate } from "@/lib/format";
-import { todayKey } from "@/lib/input";
 
 const BASE_PATH = "/admin";
 const TOKEN_KEY = "erenler_platform_token";
-const TIMEZONE = "Europe/Istanbul";
+const PAGE_SIZES = [25, 50, 100];
+const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
 type PlatformModule = { key: string; label: string };
 type AppInfo = { key: string; name: string; publicPath: string; online: boolean; modules: PlatformModule[] };
@@ -40,12 +40,12 @@ type Tenant = {
   disabledModules: string[];
   createdAt: string;
 };
-type Overview = { apps: AppInfo[]; tenants: Tenant[] };
+type Overview = { apps: AppInfo[]; rows: Tenant[]; total: number; page: number; pageCount: number; pageSize: number; today: string };
 type Secret = { title: string; tenant: Tenant; password: string };
-type Form = { app: string; slug: string; name: string; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[] };
+type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[] };
 type ApiBody<T> = { ok: true; data: T } | { ok: false; error: string };
 
-const EMPTY_FORM: Form = { app: "education", slug: "", name: "", contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [] };
+const EMPTY_FORM: Form = { app: "education", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [] };
 
 function readToken(): string | null {
   try {
@@ -73,10 +73,28 @@ class PlatformError extends Error {
   }
 }
 
-async function platformFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+function authHeaders(): Record<string, string> {
   const token = readToken();
-  const headers: Record<string, string> = {};
-  if (token) headers.Authorization = `Bearer ${token}`;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function platformDownload(path: string, fallbackName: string): Promise<void> {
+  const response = await fetch(`${BASE_PATH}/api${path}`, { headers: authHeaders(), cache: "no-store" });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as ApiBody<unknown> | null;
+    throw new PlatformError(payload && !payload.ok ? payload.error : `HTTP ${response.status}`, response.status);
+  }
+  const name = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function platformFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+  const headers = authHeaders();
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(`${BASE_PATH}/api${path}`, {
     method: init.method ?? "GET",
@@ -112,9 +130,15 @@ export default function PlatformPage() {
   );
 }
 
+function readResetToken(): string | null {
+  return new URLSearchParams(window.location.search).get("reset");
+}
+
 function PlatformScreen() {
   const stored = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
+  const initialReset = useSyncExternalStore(noopSubscribe, readResetToken, () => null);
   const [override, setSignedIn] = useState<boolean | null>(null);
+  const [resetDone, setResetDone] = useState(false);
   const signedIn = override ?? stored;
 
   function signOut() {
@@ -122,7 +146,15 @@ function PlatformScreen() {
     setSignedIn(false);
   }
 
+  function finishReset() {
+    window.history.replaceState(null, "", window.location.pathname);
+    storeToken(null);
+    setSignedIn(false);
+    setResetDone(true);
+  }
+
   if (signedIn === null) return null;
+  if (initialReset && !resetDone) return <PasswordReset token={initialReset} onDone={finishReset} />;
   return signedIn ? <TenantManager onSignOut={signOut} /> : <PlatformLogin onSignedIn={() => setSignedIn(true)} />;
 }
 
@@ -135,10 +167,36 @@ function Toolbar() {
   );
 }
 
+function AuthShell({ children }: { children: ReactNode }) {
+  const t = useI18n().messages;
+  return (
+    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
+      <div className="absolute right-4 top-4">
+        <Toolbar />
+      </div>
+      <Card className="w-full max-w-sm">
+        <CardHeader className="flex-col items-center gap-3 text-center">
+          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Building2 className="size-6" />
+          </span>
+          <CardTitle className="text-2xl font-semibold">{t.platform.title}</CardTitle>
+          <CardDescription>{t.platform.subtitle}</CardDescription>
+        </CardHeader>
+        <CardContent>{children}</CardContent>
+      </Card>
+      <div className="absolute bottom-4">
+        <MadeBy />
+      </div>
+    </div>
+  );
+}
+
 function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   const t = useI18n().messages;
+  const confirm = useConfirm();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [sending, setSending] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -155,44 +213,93 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
     }
   }
 
+  async function handleForgot() {
+    const ok = await confirm({ message: t.platform.forgotConfirm, confirmText: t.platform.forgotSend });
+    if (!ok) return;
+    setSending(true);
+    try {
+      const result = await platformFetch<{ sentTo: string }>("/password/forgot", { method: "POST", body: {} });
+      toast.success(t.platform.forgotSent.replace("{email}", result.sentTo));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t.errors.unexpected);
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background p-4">
-      <div className="absolute right-4 top-4">
-        <Toolbar />
-      </div>
-      <Card className="w-full max-w-sm">
-        <CardHeader className="flex-col items-center gap-3 text-center">
-          <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
-            <Building2 className="size-6" />
-          </span>
-          <CardTitle className="text-2xl font-semibold">{t.platform.title}</CardTitle>
-          <CardDescription>{t.platform.subtitle}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
-            <Field label={t.platform.password} htmlFor="platform-password" required>
-              <Input id="platform-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
-            </Field>
-            <Button type="submit" disabled={submitting || !password}>
-              {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-              {t.platform.login}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-      <div className="absolute bottom-4">
-        <MadeBy />
-      </div>
-    </div>
+    <AuthShell>
+      <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
+        <Field label={t.platform.password} htmlFor="platform-password" required>
+          <Input id="platform-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
+        </Field>
+        <Button type="submit" disabled={submitting || !password}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
+          {t.platform.login}
+        </Button>
+        <Button type="button" variant="link" size="sm" onClick={() => void handleForgot()} disabled={sending}>
+          {sending ? <Loader2 className="size-4 animate-spin" /> : null}
+          {t.platform.forgotPassword}
+        </Button>
+      </form>
+    </AuthShell>
+  );
+}
+
+function PasswordReset({ token, onDone }: { token: string; onDone: () => void }) {
+  const t = useI18n().messages;
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const mismatch = repeat !== "" && password !== repeat;
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!password || password !== repeat) return;
+    setSubmitting(true);
+    try {
+      await platformFetch<{ changed: boolean }>("/password/reset", { method: "POST", body: { token, password } });
+      toast.success(t.platform.resetDone);
+      onDone();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t.errors.unexpected);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <AuthShell>
+      <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
+        <p className="text-center text-sm font-medium">{t.platform.resetTitle}</p>
+        <Field label={t.platform.newPassword} htmlFor="new-password" required hint={t.platform.passwordHint}>
+          <Input id="new-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" autoFocus />
+        </Field>
+        <Field label={t.platform.newPasswordRepeat} htmlFor="new-password-repeat" required hint={mismatch ? t.platform.passwordMismatch : undefined}>
+          <Input id="new-password-repeat" type="password" clearable={false} value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" aria-invalid={mismatch} />
+        </Field>
+        <Button type="submit" disabled={submitting || !password || password !== repeat}>
+          {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
+          {t.platform.resetSubmit}
+        </Button>
+        <Button type="button" variant="link" size="sm" onClick={onDone}>
+          {t.platform.backToLogin}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }
 
 function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const { messages: t, locale } = useI18n();
   const confirm = useConfirm();
-  const [overview, setOverview] = useState<Overview>({ apps: [], tenants: [] });
+  const [overview, setOverview] = useState<Overview>(EMPTY_OVERVIEW);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [appFilter, setAppFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [editing, setEditing] = useState<Tenant | null>(null);
@@ -200,7 +307,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [form, setForm] = useState<Form>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
-  const today = todayKey(TIMEZONE);
+  const today = overview.today;
 
   const handleError = useCallback(
     (error: unknown) => {
@@ -213,34 +320,60 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     [onSignOut, t],
   );
 
+  const queryString = useCallback(
+    (paged: boolean) => {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (appFilter) params.set("app", appFilter);
+      if (statusFilter) params.set("status", statusFilter);
+      if (paged) {
+        params.set("page", String(page));
+        params.set("pageSize", String(pageSize));
+      }
+      const value = params.toString();
+      return value ? `?${value}` : "";
+    },
+    [debouncedSearch, appFilter, statusFilter, page, pageSize],
+  );
+
   const load = useCallback(
     () =>
-      platformFetch<Overview>("/tenants")
-        .then(setOverview)
+      platformFetch<Overview>(`/tenants${queryString(true)}`)
+        .then((data) => {
+          setOverview(data);
+          if (data.page !== page) setPage(data.page);
+        })
         .catch(handleError)
         .finally(() => setLoading(false)),
-    [handleError],
+    [handleError, queryString, page],
   );
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search.trim());
+      setPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      await platformDownload(`/tenants/export${queryString(false)}`, "kurumlar.xlsx");
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const appName = useCallback((key: string) => overview.apps.find((app) => app.key === key)?.name ?? key, [overview.apps]);
 
-  const rows = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase(locale);
-    return overview.tenants
-      .filter((tenant) => !appFilter || tenant.app === appFilter)
-      .filter((tenant) => {
-        if (statusFilter === "active") return tenant.active && !isExpired(tenant, today);
-        if (statusFilter === "passive") return !tenant.active;
-        if (statusFilter === "expired") return isExpired(tenant, today);
-        return true;
-      })
-      .filter((tenant) => !query || [tenant.name, tenant.slug, tenant.contactName, tenant.phone, tenant.email].some((value) => value.toLocaleLowerCase(locale).includes(query)))
-      .sort((a, b) => a.name.localeCompare(b.name, locale));
-  }, [overview.tenants, appFilter, statusFilter, search, locale, today]);
+  const rows = overview.rows;
 
   const formApp = overview.apps.find((app) => app.key === form.app);
 
@@ -257,6 +390,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       app: tenant.app,
       slug: tenant.slug,
       name: tenant.name,
+      active: tenant.active,
       contactName: tenant.contactName,
       phone: tenant.phone,
       email: tenant.email,
@@ -290,7 +424,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     };
     try {
       if (editing) {
-        await platformFetch<Tenant>(`/tenants/${editing.app}/${editing.slug}`, { method: "PATCH", body: payload });
+        await platformFetch<Tenant>(`/tenants/${editing.app}/${editing.slug}`, { method: "PATCH", body: { ...payload, active: form.active } });
         toast.success(t.platform.saved);
         setDialogOpen(false);
       } else {
@@ -369,13 +503,17 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.platform.searchPlaceholder} aria-label={t.common.search} />
           </div>
           <div className="w-48">
-            <OptionSelect value={appFilter} onChange={setAppFilter} options={appOptions} ariaLabel={t.platform.program} />
+            <OptionSelect value={appFilter} onChange={(value) => { setAppFilter(value); setPage(1); }} options={appOptions} ariaLabel={t.platform.program} />
           </div>
           <div className="w-44">
-            <OptionSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} ariaLabel={t.platform.status} />
+            <OptionSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} ariaLabel={t.platform.status} />
           </div>
           <Button variant="outline" size="icon" onClick={() => void load()} aria-label={t.platform.refresh} title={t.platform.refresh}>
             <RefreshCw className="size-4" />
+          </Button>
+          <Button variant="outline" onClick={() => void exportExcel()} disabled={exporting || overview.total === 0}>
+            {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            {t.platform.export}
           </Button>
           <Button onClick={openCreate}>
             <Plus className="size-4" />
@@ -418,7 +556,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell>
                           <div className="font-medium">{tenant.name}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{tenant.slug}</div>
+                          <div className="font-mono text-xs text-amber-600 dark:text-amber-400">{tenant.slug}</div>
                         </TableCell>
                         <TableCell className="text-sm">
                           <div>{tenant.contactName || "—"}</div>
@@ -455,7 +593,22 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             </Table>
           </CardContent>
         </Card>
-        <p className="text-xs text-muted-foreground">{t.platform.total.replace("{count}", String(rows.length))}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span>{t.platform.total.replace("{count}", String(overview.total))}</span>
+          <div className="flex items-center gap-2">
+            <span>{t.platform.pageSize}</span>
+            <div className="w-20">
+              <OptionSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZES.map((size) => ({ value: String(size), label: String(size) }))} ariaLabel={t.platform.pageSize} />
+            </div>
+            <Button variant="ghost" size="icon-sm" disabled={overview.page <= 1 || loading} onClick={() => setPage(overview.page - 1)} aria-label={t.platform.prevPage}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="min-w-16 text-center">{t.platform.pageOf.replace("{page}", String(overview.page)).replace("{pages}", String(overview.pageCount))}</span>
+            <Button variant="ghost" size="icon-sm" disabled={overview.page >= overview.pageCount || loading} onClick={() => setPage(overview.page + 1)} aria-label={t.platform.nextPage}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
+        </div>
       </main>
 
       <Dialog open={dialogOpen} onOpenChange={(open) => (saving ? undefined : setDialogOpen(open))}>
@@ -477,12 +630,34 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <Field label={t.platform.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.platform.slugHint}>
                 <Input id="tenant-slug" value={form.slug} onChange={(e) => patch({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} disabled={editing !== null || saving} maxLength={40} />
               </Field>
-              <div className="sm:col-span-2">
+              <div className={editing ? undefined : "sm:col-span-2"}>
                 <Field label={t.platform.name} htmlFor="tenant-name" required>
                   <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
                 </Field>
               </div>
-              {form.slug ? <p className="break-all text-xs text-muted-foreground sm:col-span-2">{tenantAddress(overview.apps, form.app, form.slug)}</p> : null}
+              {editing ? (
+                <Field label={t.platform.status}>
+                  <label className="flex h-9 items-center justify-between gap-2 rounded-md border px-3 text-sm">
+                    <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.platform.active : t.platform.passive}</span>
+                    <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
+                  </label>
+                </Field>
+              ) : null}
+              {form.slug ? (
+                <div className="flex items-center gap-1 sm:col-span-2">
+                  {editing ? (
+                    <a href={tenantAddress(overview.apps, form.app, form.slug)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
+                      <ExternalLink className="size-3 shrink-0" />
+                      {tenantAddress(overview.apps, form.app, form.slug)}
+                    </a>
+                  ) : (
+                    <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
+                  )}
+                  <Button type="button" variant="ghost" size="icon-xs" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug))}>
+                    <Copy className="size-3" />
+                  </Button>
+                </div>
+              ) : null}
             </section>
 
             <section className="grid gap-4 sm:grid-cols-2">
@@ -496,7 +671,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <Field label={t.platform.email} htmlFor="tenant-email">
                 <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
               </Field>
-              <Field label={t.platform.expiresAt} hint={t.platform.expiresHint}>
+              <Field label={t.platform.expiresAt}>
                 <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
               </Field>
             </section>

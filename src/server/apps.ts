@@ -51,7 +51,7 @@ export async function agentCall<T>(app: PlatformApp, path: string, init: { metho
   try {
     response = await fetch(`${app.agentUrl}/admin/api/agent${path}`, {
       method: init.method ?? "GET",
-      headers: { "x-platform-key": platformSecret(), ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Authorization: `Bearer ${platformSecret()}`, ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: AbortSignal.timeout(init.timeoutMs ?? 5000),
       cache: "no-store",

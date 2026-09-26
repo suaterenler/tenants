@@ -16,5 +16,6 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 EXPOSE 3050
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 CMD ["node", "server.js"]

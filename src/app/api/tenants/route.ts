@@ -1,10 +1,15 @@
 import { AgentError, agentCall, findApp, overview, type TenantRecord } from "@/server/apps";
 import { fail, ok, readBody, requireSession } from "@/server/auth";
+import { filterTenants, paginate, parseTenantQuery, todayIn } from "@/server/tenant-query";
 
 export async function GET(request: Request) {
   const denied = await requireSession(request);
   if (denied) return denied;
-  return ok(await overview());
+  const query = parseTenantQuery(new URL(request.url).searchParams);
+  const { apps, tenants } = await overview();
+  const filtered = filterTenants(tenants, query, todayIn());
+  const page = paginate(filtered, query.page, query.pageSize);
+  return ok({ apps, rows: page.rows, total: filtered.length, page: page.page, pageCount: page.pageCount, pageSize: query.pageSize, today: todayIn() });
 }
 
 export async function POST(request: Request) {
