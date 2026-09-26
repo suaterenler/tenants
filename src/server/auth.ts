@@ -4,11 +4,11 @@ import { NextResponse } from "next/server";
 import { tr } from "@messages/tr";
 import { credentialVersion } from "./credentials";
 
-const AUDIENCE = "erenler-platform";
-const RESET_AUDIENCE = "erenler-platform-reset";
+const AUDIENCE = "erenler-tenants";
+const RESET_AUDIENCE = "erenler-tenants-reset";
 const RESET_MINUTES = 10;
 const TOKEN_HOURS = 8;
-const DEV_SECRET = "platform-dev-secret-only-for-local-development";
+const DEV_SECRET = "tenants-dev-secret-only-for-local-development";
 
 function secret(): Uint8Array {
   const value = process.env.SESSION_SECRET?.trim() ?? "";
@@ -18,7 +18,7 @@ function secret(): Uint8Array {
 
 export async function signToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ scope: "platform", ver: await credentialVersion() })
+  return new SignJWT({ scope: "tenants", ver: await credentialVersion() })
     .setProtectedHeader({ alg: "HS256" })
     .setAudience(AUDIENCE)
     .setIssuedAt(now)
@@ -29,7 +29,7 @@ export async function signToken(): Promise<string> {
 async function verifyToken(token: string): Promise<boolean> {
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"], audience: AUDIENCE });
-    return payload.scope === "platform" && payload.ver === (await credentialVersion());
+    return payload.scope === "tenants" && payload.ver === (await credentialVersion());
   } catch {
     return false;
   }

@@ -6,7 +6,7 @@ export async function POST(request: Request) {
   if (rateLimited(request, 3, 15 * 60 * 1000, "forgot")) return fail("rateLimited", 429);
   const to = adminEmail();
   const link = `${publicUrl()}/admin?reset=${encodeURIComponent(await signResetToken())}`;
-  const m = tr.platform.resetMail;
+  const m = tr.tenants.resetMail;
   try {
     await sendMail({
       to,

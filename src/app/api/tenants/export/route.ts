@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const today = todayIn();
   const { apps, tenants } = await overview();
   const origin = (process.env.PUBLIC_URL?.trim() || new URL(request.url).origin).replace(/\/+$/, "");
-  const t = tr.platform;
+  const t = tr.tenants;
   const rows = filterTenants(tenants, query, today).map((tenant) => {
     const app = apps.find((item) => item.key === tenant.app);
     return {

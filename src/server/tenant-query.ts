@@ -1,4 +1,4 @@
-import type { PlatformTenant } from "./apps";
+import type { ProgramTenant } from "./apps";
 
 export type TenantStatusFilter = "" | "active" | "passive" | "expired";
 export type TenantQuery = { search: string; app: string; status: TenantStatusFilter; page: number; pageSize: number };
@@ -27,11 +27,11 @@ export function parseTenantQuery(params: URLSearchParams): TenantQuery {
   };
 }
 
-export function isExpired(tenant: Pick<PlatformTenant, "expiresAt">, today: string): boolean {
+export function isExpired(tenant: Pick<ProgramTenant, "expiresAt">, today: string): boolean {
   return tenant.expiresAt !== null && tenant.expiresAt <= today;
 }
 
-export function filterTenants(tenants: PlatformTenant[], query: Omit<TenantQuery, "page" | "pageSize">, today: string): PlatformTenant[] {
+export function filterTenants(tenants: ProgramTenant[], query: Omit<TenantQuery, "page" | "pageSize">, today: string): ProgramTenant[] {
   const needle = query.search.toLocaleLowerCase("tr");
   return tenants
     .filter((tenant) => !query.app || tenant.app === query.app)

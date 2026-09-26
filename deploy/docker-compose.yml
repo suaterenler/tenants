@@ -17,11 +17,14 @@ services:
     environment:
       HOSTNAME: 127.0.0.1
       PORT: ${APP_PORT:-3050}
-      PLATFORM_PASSWORD: ${PLATFORM_PASSWORD:?PLATFORM_PASSWORD zorunlu}
-      PLATFORM_SECRET: ${PLATFORM_SECRET:?PLATFORM_SECRET zorunlu}
+      TENANTS_PASSWORD: ${TENANTS_PASSWORD:-${PLATFORM_PASSWORD:-}}
+      TENANTS_SECRET: ${TENANTS_SECRET:-${PLATFORM_SECRET:-}}
+      PLATFORM_SECRET: ${PLATFORM_SECRET:-}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
       EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3043/education}
       SALON_URL: ${SALON_URL:-http://127.0.0.1:3044/salon}
+      EDUCATION_ROOT_URL: ${EDUCATION_ROOT_URL:-http://127.0.0.1:3143}
+      SALON_ROOT_URL: ${SALON_ROOT_URL:-http://127.0.0.1:3144}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-suaterenler@gmail.com}
       PUBLIC_URL: ${PUBLIC_URL:-https://app.erenleryazilim.com}
       MAIL_FROM: ${MAIL_FROM:-Erenler Yönetim <noreply@erenleryazilim.com>}
@@ -32,6 +35,24 @@ services:
       DATA_DIR: /app/data
       TRUST_PROXY: "1"
       NODE_ENV: production
+
+  edge:
+    image: ${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}
+    container_name: tenants-edge
+    restart: unless-stopped
+    network_mode: host
+    command: ["node", "edge/server.mjs"]
+    depends_on:
+      - app
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${EDGE_PORT}/__edge/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    environment:
+      EDGE_PORT: ${EDGE_PORT:-3060}
+      TENANTS_INTERNAL_URL: http://127.0.0.1:${APP_PORT:-3050}/admin
+      TENANTS_SECRET: ${TENANTS_SECRET:-${PLATFORM_SECRET:-}}
 
 volumes:
   data:

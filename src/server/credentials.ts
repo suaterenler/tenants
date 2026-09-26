@@ -35,7 +35,7 @@ export async function credentialVersion(): Promise<number> {
 export async function verifyPassword(candidate: string): Promise<boolean> {
   const stored = await readStored();
   if (stored) return bcrypt.compare(candidate, stored.passwordHash);
-  const fallback = process.env.PLATFORM_PASSWORD?.trim();
+  const fallback = (process.env.TENANTS_PASSWORD ?? process.env.PLATFORM_PASSWORD)?.trim();
   return fallback ? timingSafeEqual(digest(candidate), digest(fallback)) : false;
 }
 

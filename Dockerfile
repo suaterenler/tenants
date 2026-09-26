@@ -15,6 +15,7 @@ ENV PORT=3050
 ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/edge ./edge
 EXPOSE 3050
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node

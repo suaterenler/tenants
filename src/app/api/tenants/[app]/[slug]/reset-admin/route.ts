@@ -6,7 +6,7 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
   if (denied) return denied;
   const params = await context.params;
   const app = findApp(params.app);
-  if (!app) return fail("platformUnknownApp", 400);
+  if (!app) return fail("unknownProgram", 400);
   try {
     return ok(await agentCall<{ password: string }>(app, `/tenants/${encodeURIComponent(params.slug)}/reset-admin`, { method: "POST", body: {} }));
   } catch (error) {

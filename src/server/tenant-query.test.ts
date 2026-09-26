@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { PlatformTenant } from "./apps";
+import type { ProgramTenant } from "./apps";
 import { filterTenants, paginate, parseTenantQuery } from "./tenant-query";
 
-function tenant(overrides: Partial<PlatformTenant>): PlatformTenant {
-  return { app: "education", slug: "a", name: "A", active: true, expiresAt: null, contactName: "", phone: "", email: "", disabledModules: [], createdAt: "", ...overrides };
+function tenant(overrides: Partial<ProgramTenant>): ProgramTenant {
+  return { app: "education", slug: "a", name: "A", active: true, expiresAt: null, contactName: "", phone: "", email: "", disabledModules: [], domains: [], createdAt: "", ...overrides };
 }
 
 const TODAY = "2026-09-26";

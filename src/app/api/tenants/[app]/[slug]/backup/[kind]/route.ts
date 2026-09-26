@@ -8,13 +8,13 @@ export async function GET(request: Request, context: { params: Promise<{ app: st
   if (denied) return denied;
   const params = await context.params;
   const app = findApp(params.app);
-  if (!app) return fail("platformUnknownApp", 400);
+  if (!app) return fail("unknownProgram", 400);
   if (!KINDS.has(params.kind)) return fail("notFound", 404);
   try {
     const upstream = await agentStream(app, `/tenants/${encodeURIComponent(params.slug)}/backup/${params.kind}`);
     if (!upstream.ok || !upstream.body) {
       const payload = (await upstream.json().catch(() => null)) as { code?: string } | null;
-      const code = (payload?.code ?? "platformAppUnavailable").replace(/^errors\./, "");
+      const code = (payload?.code ?? "programUnavailable").replace(/^errors\./, "");
       return fail(code === "backupUnavailable" ? "backupUnavailable" : code, upstream.status || 502);
     }
     return new Response(upstream.body, {

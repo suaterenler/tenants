@@ -1,6 +1,6 @@
 import "server-only";
 
-export type PlatformModule = { key: string; label: string };
+export type ProgramModule = { key: string; label: string };
 export type TenantRecord = {
   slug: string;
   name: string;
@@ -10,21 +10,22 @@ export type TenantRecord = {
   phone: string;
   email: string;
   disabledModules: string[];
+  domains: string[];
   createdAt: string;
 };
-export type PlatformApp = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string };
-export type PlatformAppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: PlatformModule[] };
-export type PlatformTenant = TenantRecord & { app: string };
+export type Program = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string; rootUrl: string };
+export type ProgramInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: ProgramModule[] };
+export type ProgramTenant = TenantRecord & { app: string };
 
-export function platformApps(): PlatformApp[] {
+export function programList(): Program[] {
   return [
-    { key: "education", name: "Education", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education" },
-    { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon" },
+    { key: "education", name: "Education", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education", rootUrl: process.env.EDUCATION_ROOT_URL?.trim() || "http://127.0.0.1:3143" },
+    { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon", rootUrl: process.env.SALON_ROOT_URL?.trim() || "http://127.0.0.1:3144" },
   ];
 }
 
-export function findApp(key: string): PlatformApp | null {
-  return platformApps().find((app) => app.key === key) ?? null;
+export function findApp(key: string): Program | null {
+  return programList().find((app) => app.key === key) ?? null;
 }
 
 export class AgentError extends Error {
@@ -40,38 +41,38 @@ export class AgentError extends Error {
 
 type AgentBody<T> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 
-function platformSecret(): string {
-  const value = process.env.PLATFORM_SECRET?.trim() ?? "";
-  if (value.length < 32) throw new AgentError("platformAppUnavailable", "PLATFORM_SECRET tanımlı değil.", 502);
+export function tenantsSecret(): string {
+  const value = (process.env.TENANTS_SECRET ?? process.env.PLATFORM_SECRET)?.trim() ?? "";
+  if (value.length < 32) throw new AgentError("programUnavailable", "TENANTS_SECRET tanımlı değil.", 502);
   return value;
 }
 
-export async function agentCall<T>(app: PlatformApp, path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
+export async function agentCall<T>(app: Program, path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${app.agentUrl}/admin/api/agent${path}`, {
       method: init.method ?? "GET",
-      headers: { Authorization: `Bearer ${platformSecret()}`, ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
+      headers: { Authorization: `Bearer ${tenantsSecret()}`, ...(init.body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: AbortSignal.timeout(init.timeoutMs ?? 5000),
       cache: "no-store",
     });
   } catch (error) {
     if (error instanceof AgentError) throw error;
-    throw new AgentError("platformAppUnavailable", "unreachable", 502);
+    throw new AgentError("programUnavailable", "unreachable", 502);
   }
   const payload = (await response.json().catch(() => null)) as AgentBody<T> | null;
-  if (!payload) throw new AgentError("platformAppUnavailable", `HTTP ${response.status}`, 502);
-  if (!payload.ok) throw new AgentError((payload.code ?? "platformAppUnavailable").replace(/^errors./, ""), payload.error, response.status);
+  if (!payload) throw new AgentError("programUnavailable", `HTTP ${response.status}`, 502);
+  if (!payload.ok) throw new AgentError((payload.code ?? "programUnavailable").replace(/^errors\./, "").replace(/^platform/, "tenant"), payload.error, response.status);
   return payload.data;
 }
 
-export async function overview(): Promise<{ apps: PlatformAppInfo[]; tenants: PlatformTenant[] }> {
+export async function overview(): Promise<{ apps: ProgramInfo[]; tenants: ProgramTenant[] }> {
   const results = await Promise.all(
-    platformApps().map(async (app) => {
+    programList().map(async (app) => {
       try {
-        const [records, modules] = await Promise.all([agentCall<TenantRecord[]>(app, "/tenants"), agentCall<PlatformModule[]>(app, "/modules")]);
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: true, modules }, tenants: records.map((record) => ({ ...record, app: app.key })) };
+        const [records, modules] = await Promise.all([agentCall<TenantRecord[]>(app, "/tenants"), agentCall<ProgramModule[]>(app, "/modules")]);
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: true, modules }, tenants: records.map((record) => ({ ...record, domains: record.domains ?? [], app: app.key })) };
       } catch {
         return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: false, modules: [] }, tenants: [] };
       }
@@ -80,15 +81,33 @@ export async function overview(): Promise<{ apps: PlatformAppInfo[]; tenants: Pl
   return { apps: results.map((result) => result.info), tenants: results.flatMap((result) => result.tenants) };
 }
 
-export async function agentStream(app: PlatformApp, path: string, timeoutMs = 30 * 60 * 1000): Promise<Response> {
+export async function agentStream(app: Program, path: string, timeoutMs = 30 * 60 * 1000): Promise<Response> {
   try {
     return await fetch(`${app.agentUrl}/admin/api/agent${path}`, {
-      headers: { Authorization: `Bearer ${platformSecret()}` },
+      headers: { Authorization: `Bearer ${tenantsSecret()}` },
       signal: AbortSignal.timeout(timeoutMs),
       cache: "no-store",
     });
   } catch (error) {
     if (error instanceof AgentError) throw error;
-    throw new AgentError("platformAppUnavailable", "unreachable", 502);
+    throw new AgentError("programUnavailable", "unreachable", 502);
   }
+}
+
+export type DomainRoute = { domain: string; app: string; slug: string; target: string };
+
+export async function domainRoutes(): Promise<{ routes: DomainRoute[]; complete: boolean }> {
+  const { apps, tenants } = await overview();
+  const routes = tenants.flatMap((tenant) => {
+    const app = findApp(tenant.app);
+    return app ? tenant.domains.map((domain) => ({ domain, app: app.key, slug: tenant.slug, target: app.rootUrl })) : [];
+  });
+  return { routes, complete: apps.every((app) => app.online) };
+}
+
+export async function domainConflict(domains: string[], app: string, slug: string): Promise<string | null> {
+  if (domains.length === 0) return null;
+  const { tenants } = await overview();
+  const owner = tenants.find((tenant) => !(tenant.app === app && tenant.slug === slug) && tenant.domains.some((domain) => domains.includes(domain)));
+  return owner ? owner.domains.find((domain) => domains.includes(domain)) ?? null : null;
 }

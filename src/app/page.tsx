@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, HardDrive, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -18,18 +18,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
 const BASE_PATH = "/admin";
-const TOKEN_KEY = "erenler_platform_token";
+const TOKEN_KEY = "erenler_tenants_token";
 const PAGE_SIZES = [25, 50, 100];
 const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
-type PlatformModule = { key: string; label: string };
-type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: PlatformModule[] };
+type ProgramModule = { key: string; label: string };
+type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: ProgramModule[] };
 type Tenant = {
   app: string;
   slug: string;
@@ -40,16 +41,17 @@ type Tenant = {
   phone: string;
   email: string;
   disabledModules: string[];
+  domains: string[];
   createdAt: string;
 };
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type Overview = { apps: AppInfo[]; rows: Tenant[]; total: number; page: number; pageCount: number; pageSize: number; today: string };
 type Secret = { title: string; tenant: Tenant; password: string };
-type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[] };
+type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[]; domains: string };
 type ApiBody<T> = { ok: true; data: T } | { ok: false; error: string };
 
-const EMPTY_FORM: Form = { app: "education", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [] };
+const EMPTY_FORM: Form = { app: "education", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [], domains: "" };
 
 function readToken(): string | null {
   try {
@@ -68,7 +70,7 @@ function storeToken(token: string | null): void {
   }
 }
 
-class PlatformError extends Error {
+class AdminRequestError extends Error {
   status: number;
 
   constructor(message: string, status: number) {
@@ -82,11 +84,11 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function platformDownload(path: string, fallbackName: string): Promise<void> {
+async function adminDownload(path: string, fallbackName: string): Promise<void> {
   const response = await fetch(`${BASE_PATH}/api${path}`, { headers: authHeaders(), cache: "no-store" });
   if (!response.ok) {
     const payload = (await response.json().catch(() => null)) as ApiBody<unknown> | null;
-    throw new PlatformError(payload && !payload.ok ? payload.error : `HTTP ${response.status}`, response.status);
+    throw new AdminRequestError(payload && !payload.ok ? payload.error : `HTTP ${response.status}`, response.status);
   }
   const name = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? fallbackName;
   const url = URL.createObjectURL(await response.blob());
@@ -97,7 +99,7 @@ async function platformDownload(path: string, fallbackName: string): Promise<voi
   URL.revokeObjectURL(url);
 }
 
-async function platformFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
+async function adminFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers = authHeaders();
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
   const response = await fetch(`${BASE_PATH}/api${path}`, {
@@ -107,12 +109,13 @@ async function platformFetch<T>(path: string, init: { method?: string; body?: un
     cache: "no-store",
   });
   const payload = (await response.json().catch(() => null)) as ApiBody<T> | null;
-  if (!payload) throw new PlatformError(`HTTP ${response.status}`, response.status);
-  if (!payload.ok) throw new PlatformError(payload.error, response.status);
+  if (!payload) throw new AdminRequestError(`HTTP ${response.status}`, response.status);
+  if (!payload.ok) throw new AdminRequestError(payload.error, response.status);
   return payload.data;
 }
 
-function tenantAddress(apps: AppInfo[], app: string, slug: string): string {
+function tenantAddress(apps: AppInfo[], app: string, slug: string, domains: string[] = []): string {
+  if (domains[0]) return `https://${domains[0]}`;
   const info = apps.find((item) => item.key === app);
   if (info?.publicUrl) return `${info.publicUrl.replace(/\/+$/, "")}/${slug}`;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
@@ -127,10 +130,10 @@ function noopSubscribe(): () => void {
   return () => undefined;
 }
 
-export default function PlatformPage() {
+export default function AdminPage() {
   return (
     <ConfirmProvider>
-      <PlatformScreen />
+      <AdminScreen />
     </ConfirmProvider>
   );
 }
@@ -139,7 +142,7 @@ function readResetToken(): string | null {
   return new URLSearchParams(window.location.search).get("reset");
 }
 
-function PlatformScreen() {
+function AdminScreen() {
   const stored = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
   const initialReset = useSyncExternalStore(noopSubscribe, readResetToken, () => null);
   const [override, setSignedIn] = useState<boolean | null>(null);
@@ -160,7 +163,7 @@ function PlatformScreen() {
 
   if (signedIn === null) return null;
   if (initialReset && !resetDone) return <PasswordReset token={initialReset} onDone={finishReset} />;
-  return signedIn ? <TenantManager onSignOut={signOut} /> : <PlatformLogin onSignedIn={() => setSignedIn(true)} />;
+  return signedIn ? <TenantManager onSignOut={signOut} /> : <AdminLogin onSignedIn={() => setSignedIn(true)} />;
 }
 
 function Toolbar() {
@@ -184,8 +187,8 @@ function AuthShell({ children }: { children: ReactNode }) {
           <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-primary-foreground">
             <Building2 className="size-6" />
           </span>
-          <CardTitle className="text-2xl font-semibold">{t.platform.title}</CardTitle>
-          <CardDescription>{t.platform.subtitle}</CardDescription>
+          <CardTitle className="text-2xl font-semibold">{t.tenants.title}</CardTitle>
+          <CardDescription>{t.tenants.subtitle}</CardDescription>
         </CardHeader>
         <CardContent>{children}</CardContent>
       </Card>
@@ -196,7 +199,7 @@ function AuthShell({ children }: { children: ReactNode }) {
   );
 }
 
-function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
+function AdminLogin({ onSignedIn }: { onSignedIn: () => void }) {
   const t = useI18n().messages;
   const confirm = useConfirm();
   const [password, setPassword] = useState("");
@@ -208,7 +211,7 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
     if (!password) return;
     setSubmitting(true);
     try {
-      const result = await platformFetch<{ token: string }>("/login", { method: "POST", body: { password } });
+      const result = await adminFetch<{ token: string }>("/login", { method: "POST", body: { password } });
       storeToken(result.token);
       onSignedIn();
     } catch (error) {
@@ -219,12 +222,12 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   }
 
   async function handleForgot() {
-    const ok = await confirm({ message: t.platform.forgotConfirm, confirmText: t.platform.forgotSend });
+    const ok = await confirm({ message: t.tenants.forgotConfirm, confirmText: t.tenants.forgotSend });
     if (!ok) return;
     setSending(true);
     try {
-      const result = await platformFetch<{ sentTo: string }>("/password/forgot", { method: "POST", body: {} });
-      toast.success(t.platform.forgotSent.replace("{email}", result.sentTo));
+      const result = await adminFetch<{ sentTo: string }>("/password/forgot", { method: "POST", body: {} });
+      toast.success(t.tenants.forgotSent.replace("{email}", result.sentTo));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t.errors.unexpected);
     } finally {
@@ -235,16 +238,16 @@ function PlatformLogin({ onSignedIn }: { onSignedIn: () => void }) {
   return (
     <AuthShell>
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
-        <Field label={t.platform.password} htmlFor="platform-password" required>
-          <Input id="platform-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
+        <Field label={t.tenants.password} htmlFor="admin-password" required>
+          <Input id="admin-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
         </Field>
         <Button type="submit" disabled={submitting || !password}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-          {t.platform.login}
+          {t.tenants.login}
         </Button>
         <Button type="button" variant="link" size="sm" onClick={() => void handleForgot()} disabled={sending}>
           {sending ? <Loader2 className="size-4 animate-spin" /> : null}
-          {t.platform.forgotPassword}
+          {t.tenants.forgotPassword}
         </Button>
       </form>
     </AuthShell>
@@ -266,14 +269,14 @@ function UsageCell({ row }: { row: UsageRow | null }) {
   if (!row) return <TableCell className="text-right text-sm text-muted-foreground">—</TableCell>;
   const db = row.dbBytes ?? 0;
   return (
-    <TableCell className="text-right text-sm tabular-nums" title={`${t.platform.database}: ${row.dbBytes === null ? "—" : formatBytes(db, locale)} · ${t.platform.files}: ${formatBytes(row.uploadBytes, locale)}`}>
+    <TableCell className="text-right text-sm tabular-nums" title={`${t.tenants.database}: ${row.dbBytes === null ? "—" : formatBytes(db, locale)} · ${t.tenants.files}: ${formatBytes(row.uploadBytes, locale)}`}>
       <div className="font-medium">{formatBytes(db + row.uploadBytes, locale)}</div>
       <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1" title={t.platform.database}>
+        <span className="inline-flex items-center gap-1" title={t.tenants.database}>
           <Database className="size-3" />
           {row.dbBytes === null ? "—" : formatBytes(db, locale)}
         </span>
-        <span className="inline-flex items-center gap-1" title={t.platform.files}>
+        <span className="inline-flex items-center gap-1" title={t.tenants.files}>
           <FolderOpen className="size-3" />
           {formatBytes(row.uploadBytes, locale)}
         </span>
@@ -294,8 +297,8 @@ function PasswordReset({ token, onDone }: { token: string; onDone: () => void })
     if (!password || password !== repeat) return;
     setSubmitting(true);
     try {
-      await platformFetch<{ changed: boolean }>("/password/reset", { method: "POST", body: { token, password } });
-      toast.success(t.platform.resetDone);
+      await adminFetch<{ changed: boolean }>("/password/reset", { method: "POST", body: { token, password } });
+      toast.success(t.tenants.resetDone);
       onDone();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t.errors.unexpected);
@@ -307,19 +310,19 @@ function PasswordReset({ token, onDone }: { token: string; onDone: () => void })
   return (
     <AuthShell>
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
-        <p className="text-center text-sm font-medium">{t.platform.resetTitle}</p>
-        <Field label={t.platform.newPassword} htmlFor="new-password" required hint={t.platform.passwordHint}>
+        <p className="text-center text-sm font-medium">{t.tenants.resetTitle}</p>
+        <Field label={t.tenants.newPassword} htmlFor="new-password" required hint={t.tenants.passwordHint}>
           <Input id="new-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" autoFocus />
         </Field>
-        <Field label={t.platform.newPasswordRepeat} htmlFor="new-password-repeat" required hint={mismatch ? t.platform.passwordMismatch : undefined}>
+        <Field label={t.tenants.newPasswordRepeat} htmlFor="new-password-repeat" required hint={mismatch ? t.tenants.passwordMismatch : undefined}>
           <Input id="new-password-repeat" type="password" clearable={false} value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" aria-invalid={mismatch} />
         </Field>
         <Button type="submit" disabled={submitting || !password || password !== repeat}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-          {t.platform.resetSubmit}
+          {t.tenants.resetSubmit}
         </Button>
         <Button type="button" variant="link" size="sm" onClick={onDone}>
-          {t.platform.backToLogin}
+          {t.tenants.backToLogin}
         </Button>
       </form>
     </AuthShell>
@@ -356,7 +359,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   const handleError = useCallback(
     (error: unknown) => {
-      if (error instanceof PlatformError && error.status === 401) {
+      if (error instanceof AdminRequestError && error.status === 401) {
         onSignOut();
         return;
       }
@@ -383,7 +386,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   const load = useCallback(
     () =>
-      platformFetch<Overview>(`/tenants${queryString(true)}`)
+      adminFetch<Overview>(`/tenants${queryString(true)}`)
         .then((data) => {
           setOverview(data);
           if (data.page !== page) setPage(data.page);
@@ -406,16 +409,16 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   }, [search]);
 
   async function confirmBackup(tenant: Tenant, kind: "database" | "files") {
-    const message = (kind === "database" ? t.platform.backupDatabaseConfirm : t.platform.backupFilesConfirm).replace("{name}", tenant.name);
-    const ok = await confirm({ message, confirmText: t.platform.download });
+    const message = (kind === "database" ? t.tenants.backupDatabaseConfirm : t.tenants.backupFilesConfirm).replace("{name}", tenant.name);
+    const ok = await confirm({ message, confirmText: t.tenants.download });
     if (ok) await downloadBackup(tenant, kind);
   }
 
   async function downloadBackup(tenant: Tenant, kind: "database" | "files") {
     setDownloading(`${tenant.app}:${tenant.slug}:${kind}`);
     try {
-      await platformDownload(`/tenants/${tenant.app}/${tenant.slug}/backup/${kind}`, `${tenant.app}_${tenant.slug}-${kind}.zip`);
-      toast.success(t.platform.backupReady);
+      await adminDownload(`/tenants/${tenant.app}/${tenant.slug}/backup/${kind}`, `${tenant.app}_${tenant.slug}-${kind}.zip`);
+      toast.success(t.tenants.backupReady);
     } catch (error) {
       handleError(error);
     } finally {
@@ -433,8 +436,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     if (!deleting || deleteCode !== deleting.slug) return;
     setDeleteBusy(true);
     try {
-      await platformFetch<{ deleted: boolean }>(`/tenants/${deleting.app}/${deleting.slug}`, { method: "DELETE" });
-      toast.success(t.platform.deleted.replace("{name}", deleting.name));
+      await adminFetch<{ deleted: boolean }>(`/tenants/${deleting.app}/${deleting.slug}`, { method: "DELETE" });
+      toast.success(t.tenants.deleted.replace("{name}", deleting.name));
       setDeleting(null);
       setUsage(null);
       await load();
@@ -448,7 +451,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   async function calculateUsage() {
     setCalculating(true);
     try {
-      setUsage(await platformFetch<UsageResult>("/tenants/usage"));
+      setUsage(await adminFetch<UsageResult>("/tenants/usage"));
     } catch (error) {
       handleError(error);
     } finally {
@@ -463,7 +466,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   async function exportExcel() {
     setExporting(true);
     try {
-      await platformDownload(`/tenants/export${queryString(false)}`, "kurumlar.xlsx");
+      await adminDownload(`/tenants/export${queryString(false)}`, "kurumlar.xlsx");
     } catch (error) {
       handleError(error);
     } finally {
@@ -498,6 +501,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       email: tenant.email,
       expiresAt: tenant.expiresAt ?? "",
       disabledModules: tenant.disabledModules,
+      domains: (tenant.domains ?? []).join("\n"),
     });
     setDialogOpen(true);
   }
@@ -523,16 +527,17 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       email: form.email,
       expiresAt: form.expiresAt || null,
       disabledModules: form.disabledModules,
+      domains: form.domains.split(/[\s,]+/).filter(Boolean),
     };
     try {
       if (editing) {
-        await platformFetch<Tenant>(`/tenants/${editing.app}/${editing.slug}`, { method: "PATCH", body: { ...payload, active: form.active } });
-        toast.success(t.platform.saved);
+        await adminFetch<Tenant>(`/tenants/${editing.app}/${editing.slug}`, { method: "PATCH", body: { ...payload, active: form.active } });
+        toast.success(t.tenants.saved);
         setDialogOpen(false);
       } else {
-        const result = await platformFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug } });
+        const result = await adminFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug } });
         setDialogOpen(false);
-        showSecret({ title: t.platform.created, tenant: result.tenant, password: result.adminPassword });
+        showSecret({ title: t.tenants.created, tenant: result.tenant, password: result.adminPassword });
       }
       await load();
     } catch (error) {
@@ -543,11 +548,11 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   }
 
   async function toggleActive(tenant: Tenant, next: boolean) {
-    const message = (next ? t.platform.activateConfirm : t.platform.deactivateConfirm).replace("{name}", tenant.name);
-    const ok = await confirm({ message, confirmText: next ? t.platform.activate : t.platform.deactivate, danger: !next });
+    const message = (next ? t.tenants.activateConfirm : t.tenants.deactivateConfirm).replace("{name}", tenant.name);
+    const ok = await confirm({ message, confirmText: next ? t.tenants.activate : t.tenants.deactivate, danger: !next });
     if (!ok) return;
     try {
-      await platformFetch<Tenant>(`/tenants/${tenant.app}/${tenant.slug}`, { method: "PATCH", body: { active: next } });
+      await adminFetch<Tenant>(`/tenants/${tenant.app}/${tenant.slug}`, { method: "PATCH", body: { active: next } });
       await load();
     } catch (error) {
       handleError(error);
@@ -555,12 +560,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   }
 
   async function resetAdmin(tenant: Tenant) {
-    const ok = await confirm({ message: t.platform.resetAdminConfirm.replace("{name}", tenant.name), confirmText: t.platform.resetAdmin, danger: true });
+    const ok = await confirm({ message: t.tenants.resetAdminConfirm.replace("{name}", tenant.name), confirmText: t.tenants.resetAdmin, danger: true });
     if (!ok) return;
     try {
-      const result = await platformFetch<{ password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: {} });
+      const result = await adminFetch<{ password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: {} });
       setDialogOpen(false);
-      showSecret({ title: t.platform.passwordReset, tenant, password: result.password });
+      showSecret({ title: t.tenants.passwordReset, tenant, password: result.password });
     } catch (error) {
       handleError(error);
     }
@@ -575,8 +580,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     if (!secret || !mailTo.trim()) return;
     setMailing(true);
     try {
-      const result = await platformFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password } });
-      toast.success(t.platform.credentialsSent.replace("{email}", result.sentTo));
+      const result = await adminFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password } });
+      toast.success(t.tenants.credentialsSent.replace("{email}", result.sentTo));
     } catch (error) {
       handleError(error);
     } finally {
@@ -586,27 +591,27 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   function secretRows(value: Secret): { label: string; value: string; link: boolean }[] {
     return [
-      { label: t.platform.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug), link: true },
-      { label: t.platform.adminUser, value: "admin", link: false },
-      { label: t.platform.adminPassword, value: value.password, link: false },
+      { label: t.tenants.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains), link: true },
+      { label: t.tenants.adminUser, value: "admin", link: false },
+      { label: t.tenants.adminPassword, value: value.password, link: false },
     ];
   }
 
   async function copy(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      toast.success(t.platform.copied);
+      toast.success(t.tenants.copied);
     } catch {
       return;
     }
   }
 
-  const appOptions = [{ value: "", label: t.platform.allPrograms }, ...overview.apps.map((app) => ({ value: app.key, label: app.online ? app.name : `${app.name} (${t.platform.notConnected})` }))];
+  const appOptions = [{ value: "", label: t.tenants.allPrograms }, ...overview.apps.map((app) => ({ value: app.key, label: app.online ? app.name : `${app.name} (${t.tenants.notConnected})` }))];
   const statusOptions = [
-    { value: "", label: t.platform.allStatuses },
-    { value: "active", label: t.platform.active },
-    { value: "passive", label: t.platform.passive },
-    { value: "expired", label: t.platform.expired },
+    { value: "", label: t.tenants.allStatuses },
+    { value: "active", label: t.tenants.active },
+    { value: "passive", label: t.tenants.passive },
+    { value: "expired", label: t.tenants.expired },
   ];
 
   return (
@@ -614,13 +619,13 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
         <div className="flex items-center gap-2 font-semibold">
           <Building2 className="size-5" />
-          {t.platform.title}
+          {t.tenants.title}
         </div>
         <div className="flex items-center gap-1">
           <Toolbar />
           <Button variant="ghost" size="sm" onClick={onSignOut}>
             <LogOut className="size-4" />
-            {t.platform.logout}
+            {t.tenants.logout}
           </Button>
         </div>
       </header>
@@ -628,28 +633,28 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-56 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.platform.searchPlaceholder} aria-label={t.common.search} />
+            <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.tenants.searchPlaceholder} aria-label={t.common.search} />
           </div>
           <div className="w-48">
-            <OptionSelect value={appFilter} onChange={(value) => { setAppFilter(value); setPage(1); }} options={appOptions} ariaLabel={t.platform.program} />
+            <OptionSelect value={appFilter} onChange={(value) => { setAppFilter(value); setPage(1); }} options={appOptions} ariaLabel={t.tenants.program} />
           </div>
           <div className="w-44">
-            <OptionSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} ariaLabel={t.platform.status} />
+            <OptionSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} ariaLabel={t.tenants.status} />
           </div>
-          <Button variant="outline" size="icon" onClick={() => void load()} aria-label={t.platform.refresh} title={t.platform.refresh}>
+          <Button variant="outline" size="icon" onClick={() => void load()} aria-label={t.tenants.refresh} title={t.tenants.refresh}>
             <RefreshCw className="size-4" />
           </Button>
           <Button variant="outline" onClick={() => void calculateUsage()} disabled={calculating || overview.total === 0}>
             {calculating ? <Loader2 className="size-4 animate-spin" /> : <HardDrive className="size-4" />}
-            {t.platform.calculateUsage}
+            {t.tenants.calculateUsage}
           </Button>
           <Button variant="outline" onClick={() => void exportExcel()} disabled={exporting || overview.total === 0}>
             {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
-            {t.platform.export}
+            {t.tenants.export}
           </Button>
           <Button onClick={openCreate}>
             <Plus className="size-4" />
-            {t.platform.newTenant}
+            {t.tenants.newTenant}
           </Button>
         </div>
         <Card>
@@ -657,12 +662,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t.platform.program}</TableHead>
-                  <TableHead>{t.platform.name}</TableHead>
-                  <TableHead>{t.platform.contact}</TableHead>
-                  <TableHead>{t.platform.expiresAt}</TableHead>
-                  {usage ? <TableHead className="text-right">{t.platform.size}</TableHead> : null}
-                  <TableHead className="w-24">{t.platform.status}</TableHead>
+                  <TableHead>{t.tenants.program}</TableHead>
+                  <TableHead>{t.tenants.name}</TableHead>
+                  <TableHead>{t.tenants.contact}</TableHead>
+                  <TableHead>{t.tenants.expiresAt}</TableHead>
+                  {usage ? <TableHead className="text-right">{t.tenants.size}</TableHead> : null}
+                  <TableHead className="w-24">{t.tenants.status}</TableHead>
                   <TableHead className="w-48" />
                 </TableRow>
               </TableHeader>
@@ -676,7 +681,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                 ) : rows.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={columnCount} className="py-8 text-center text-muted-foreground">
-                      {t.platform.empty}
+                      {t.tenants.empty}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -690,6 +695,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         <TableCell>
                           <div className="font-medium">{tenant.name}</div>
                           <div className="font-mono text-xs text-amber-600 dark:text-amber-400">{tenant.slug}</div>
+                          {tenant.domains?.length ? (
+                            <div className="flex flex-wrap items-center gap-1 pt-0.5 text-xs text-muted-foreground">
+                              <Globe className="size-3" />
+                              {tenant.domains.join(", ")}
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell className="text-sm">
                           <div>{tenant.contactName || "—"}</div>
@@ -697,34 +708,34 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell className="text-sm">
                           {tenant.expiresAt ? (
-                            <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.platform.expiredHint : undefined}>
+                            <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.tenants.expiredHint : undefined}>
                               {formatDate(tenant.expiresAt, locale)}
-                              {expired ? ` · ${t.platform.expired}` : ""}
+                              {expired ? ` · ${t.tenants.expired}` : ""}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground">{t.platform.noExpiry}</span>
+                            <span className="text-muted-foreground">{t.tenants.noExpiry}</span>
                           )}
                         </TableCell>
                         {usage ? <UsageCell row={usageOf(tenant)} /> : null}
                         <TableCell>
-                          <Switch checked={tenant.active} onCheckedChange={(next) => void toggleActive(tenant, next)} aria-label={t.platform.status} />
+                          <Switch checked={tenant.active} onCheckedChange={(next) => void toggleActive(tenant, next)} aria-label={t.tenants.status} />
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.open} title={t.platform.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug)} target="_blank" rel="noreferrer" />}>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains)} target="_blank" rel="noreferrer" />}>
                               <ExternalLink className="size-4" />
                             </Button>
-                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.downloadDatabase} title={t.platform.downloadDatabase} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "database")}>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.tenants.downloadDatabase} title={t.tenants.downloadDatabase} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "database")}>
                               {downloading === `${tenant.app}:${tenant.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <DatabaseArrowDown className="size-4" />}
                             </Button>
-                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.downloadFiles} title={t.platform.downloadFiles} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "files")}>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.tenants.downloadFiles} title={t.tenants.downloadFiles} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "files")}>
                               {downloading === `${tenant.app}:${tenant.slug}:files` ? <Loader2 className="size-4 animate-spin" /> : <FolderDown className="size-4" />}
                             </Button>
-                            <Button variant="ghost" size="icon-sm" aria-label={t.platform.edit} title={t.platform.edit} onClick={() => openEdit(tenant)}>
+                            <Button variant="ghost" size="icon-sm" aria-label={t.tenants.edit} title={t.tenants.edit} onClick={() => openEdit(tenant)}>
                               <Pencil className="size-4" />
                             </Button>
-                            <DisabledReason reason={tenant.active ? t.platform.deleteNeedsPassive : null}>
-                              <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={t.platform.delete} title={tenant.active ? undefined : t.platform.delete} disabled={tenant.active} onClick={() => askDelete(tenant)}>
+                            <DisabledReason reason={tenant.active ? t.tenants.deleteNeedsPassive : null}>
+                              <Button variant="ghost" size="icon-sm" className="text-destructive hover:text-destructive" aria-label={t.tenants.delete} title={tenant.active ? undefined : t.tenants.delete} disabled={tenant.active} onClick={() => askDelete(tenant)}>
                                 <Trash2 className="size-4" />
                               </Button>
                             </DisabledReason>
@@ -740,19 +751,19 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         </Card>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>
-            {t.platform.total.replace("{count}", String(overview.total))}
-            {usage ? ` · ${t.platform.totalSize.replace("{size}", formatBytes(usageTotal, locale))} · ${t.platform.calculatedAt.replace("{time}", formatDateTime(usage.calculatedAt, locale))}` : ""}
+            {t.tenants.total.replace("{count}", String(overview.total))}
+            {usage ? ` · ${t.tenants.totalSize.replace("{size}", formatBytes(usageTotal, locale))} · ${t.tenants.calculatedAt.replace("{time}", formatDateTime(usage.calculatedAt, locale))}` : ""}
           </span>
           <div className={overview.total > PAGE_SIZES[0] ? "flex items-center gap-2" : "hidden"}>
-            <span>{t.platform.pageSize}</span>
+            <span>{t.tenants.pageSize}</span>
             <div className="w-20">
-              <OptionSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZES.map((size) => ({ value: String(size), label: String(size) }))} ariaLabel={t.platform.pageSize} />
+              <OptionSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZES.map((size) => ({ value: String(size), label: String(size) }))} ariaLabel={t.tenants.pageSize} />
             </div>
-            <Button variant="ghost" size="icon-sm" disabled={overview.page <= 1 || loading} onClick={() => setPage(overview.page - 1)} aria-label={t.platform.prevPage}>
+            <Button variant="ghost" size="icon-sm" disabled={overview.page <= 1 || loading} onClick={() => setPage(overview.page - 1)} aria-label={t.tenants.prevPage}>
               <ChevronLeft className="size-4" />
             </Button>
-            <span className="min-w-16 text-center">{t.platform.pageOf.replace("{page}", String(overview.page)).replace("{pages}", String(overview.pageCount))}</span>
-            <Button variant="ghost" size="icon-sm" disabled={overview.page >= overview.pageCount || loading} onClick={() => setPage(overview.page + 1)} aria-label={t.platform.nextPage}>
+            <span className="min-w-16 text-center">{t.tenants.pageOf.replace("{page}", String(overview.page)).replace("{pages}", String(overview.pageCount))}</span>
+            <Button variant="ghost" size="icon-sm" disabled={overview.page >= overview.pageCount || loading} onClick={() => setPage(overview.page + 1)} aria-label={t.tenants.nextPage}>
               <ChevronRight className="size-4" />
             </Button>
           </div>
@@ -762,42 +773,42 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       <Dialog open={dialogOpen} onOpenChange={(open) => (saving ? undefined : setDialogOpen(open))}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{editing ? `${t.platform.editTenant} · ${editing.name}` : t.platform.newTenant}</DialogTitle>
+            <DialogTitle>{editing ? `${t.tenants.editTenant} · ${editing.name}` : t.tenants.newTenant}</DialogTitle>
           </DialogHeader>
           <form id="tenant-form" onSubmit={(event) => void handleSave(event)} className="flex flex-col gap-4">
             <Tabs value={tab} onValueChange={(value) => setTab(String(value))} className="gap-4">
               <TabsList>
-                <TabsTrigger value="general">{t.platform.general}</TabsTrigger>
-                <TabsTrigger value="contact">{t.platform.contact}</TabsTrigger>
+                <TabsTrigger value="general">{t.tenants.general}</TabsTrigger>
+                <TabsTrigger value="contact">{t.tenants.contact}</TabsTrigger>
                 <TabsTrigger value="modules">
-                  {t.platform.modules}
+                  {t.tenants.modules}
                   {form.disabledModules.length > 0 ? <Badge variant="secondary">{form.disabledModules.length}</Badge> : null}
                 </TabsTrigger>
-                {editing ? <TabsTrigger value="backup">{t.platform.backup}</TabsTrigger> : null}
+                {editing ? <TabsTrigger value="backup">{t.tenants.backup}</TabsTrigger> : null}
               </TabsList>
               <TabsContent value="general" className="min-h-72">
                 <section className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t.platform.program} required>
+                  <Field label={t.tenants.program} required>
                     <OptionSelect
                       value={form.app}
                       onChange={(value) => patch({ app: value, disabledModules: [] })}
                       options={overview.apps.filter((app) => app.online).map((app) => ({ value: app.key, label: app.name }))}
-                      ariaLabel={t.platform.program}
+                      ariaLabel={t.tenants.program}
                       disabled={editing !== null || saving}
                     />
                   </Field>
-                  <Field label={t.platform.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.platform.slugHint}>
+                  <Field label={t.tenants.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.tenants.slugHint}>
                     <Input id="tenant-slug" value={form.slug} onChange={(e) => patch({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} disabled={editing !== null || saving} maxLength={40} />
                   </Field>
                   <div className={editing ? undefined : "sm:col-span-2"}>
-                    <Field label={t.platform.name} htmlFor="tenant-name" required>
+                    <Field label={t.tenants.name} htmlFor="tenant-name" required>
                       <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
                     </Field>
                   </div>
                   {editing ? (
-                    <Field label={t.platform.status}>
+                    <Field label={t.tenants.status}>
                       <label className="flex h-9 items-center justify-between gap-2 rounded-md border px-3 text-sm">
-                        <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.platform.active : t.platform.passive}</span>
+                        <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.tenants.active : t.tenants.passive}</span>
                         <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
                       </label>
                     </Field>
@@ -805,33 +816,38 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   {form.slug ? (
                     <div className="flex items-center gap-1 sm:col-span-2">
                       {editing ? (
-                        <a href={tenantAddress(overview.apps, form.app, form.slug)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
+                        <a href={tenantAddress(overview.apps, form.app, form.slug, editing?.domains)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
                           <ExternalLink className="size-3 shrink-0" />
-                          {tenantAddress(overview.apps, form.app, form.slug)}
+                          {tenantAddress(overview.apps, form.app, form.slug, editing?.domains)}
                         </a>
                       ) : (
                         <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
                       )}
-                      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug))}>
+                      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug, editing?.domains))}>
                         <Copy className="size-3" />
                       </Button>
                     </div>
                   ) : null}
-                </section>
+                  <div className="sm:col-span-2">
+                        <Field label={t.tenants.domains} htmlFor="tenant-domains" hint={t.tenants.domainsHint}>
+                          <Textarea id="tenant-domains" rows={2} value={form.domains} onChange={(e) => patch({ domains: e.target.value })} placeholder="merhaba.com&#10;salon.merhaba.com" disabled={saving} className="font-mono text-xs" />
+                        </Field>
+                      </div>
+                    </section>
               </TabsContent>
 
               <TabsContent value="contact" className="min-h-72">
                 <section className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t.platform.contactName} htmlFor="tenant-contact">
+                  <Field label={t.tenants.contactName} htmlFor="tenant-contact">
                     <Input id="tenant-contact" value={form.contactName} onChange={(e) => patch({ contactName: e.target.value })} disabled={saving} />
                   </Field>
-                  <Field label={t.platform.phone}>
+                  <Field label={t.tenants.phone}>
                     <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
                   </Field>
-                  <Field label={t.platform.email} htmlFor="tenant-email">
+                  <Field label={t.tenants.email} htmlFor="tenant-email">
                     <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
                   </Field>
-                  <Field label={t.platform.expiresAt}>
+                  <Field label={t.tenants.expiresAt}>
                     <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
                   </Field>
                 </section>
@@ -841,7 +857,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                 <section className="flex max-h-[55vh] flex-col gap-2 overflow-y-auto pr-1">
                   {formApp && formApp.modules.length > 0 ? (
                     <>
-                      <p className="text-xs text-muted-foreground">{t.platform.modulesHint}</p>
+                      <p className="text-xs text-muted-foreground">{t.tenants.modulesHint}</p>
                       <div className="grid gap-2 sm:grid-cols-3">
                         {formApp.modules.map((module) => (
                           <label key={module.key} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm">
@@ -852,35 +868,35 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       </div>
                     </>
                   ) : (
-                    <p className="text-xs text-muted-foreground">{t.platform.modulesUnavailable}</p>
+                    <p className="text-xs text-muted-foreground">{t.tenants.modulesUnavailable}</p>
                   )}
                 </section>
               </TabsContent>
               {editing ? (
                 <TabsContent value="backup" className="min-h-72">
                   <section className="flex flex-col gap-4">
-                    <p className="text-sm text-muted-foreground">{t.platform.backupHint}</p>
+                    <p className="text-sm text-muted-foreground">{t.tenants.backupHint}</p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-3 rounded-lg border p-4">
                         <div className="flex items-center gap-2 font-medium">
                           <Database className="size-4" />
-                          {t.platform.database}
+                          {t.tenants.database}
                         </div>
-                        <p className="text-xs text-muted-foreground">{t.platform.backupDatabaseHint}</p>
+                        <p className="text-xs text-muted-foreground">{t.tenants.backupDatabaseHint}</p>
                         <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "database")} disabled={downloading !== null}>
                           {downloading === `${editing.app}:${editing.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
-                          {t.platform.downloadDatabase}
+                          {t.tenants.downloadDatabase}
                         </Button>
                       </div>
                       <div className="flex flex-col gap-3 rounded-lg border p-4">
                         <div className="flex items-center gap-2 font-medium">
                           <FolderOpen className="size-4" />
-                          {t.platform.files}
+                          {t.tenants.files}
                         </div>
-                        <p className="text-xs text-muted-foreground">{t.platform.backupFilesHint}</p>
+                        <p className="text-xs text-muted-foreground">{t.tenants.backupFilesHint}</p>
                         <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "files")} disabled={downloading !== null}>
                           {downloading === `${editing.app}:${editing.slug}:files` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
-                          {t.platform.downloadFiles}
+                          {t.tenants.downloadFiles}
                         </Button>
                       </div>
                     </div>
@@ -892,7 +908,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             {saving && !editing ? (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
-                {t.platform.creating}
+                {t.tenants.creating}
               </p>
             ) : null}
           </form>
@@ -901,12 +917,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => void resetAdmin(editing)} disabled={saving}>
                   <KeyRound className="size-4" />
-                  {t.platform.resetAdmin}
+                  {t.tenants.resetAdmin}
                 </Button>
-                <DisabledReason reason={editing.active ? t.platform.deleteNeedsPassive : null}>
+                <DisabledReason reason={editing.active ? t.tenants.deleteNeedsPassive : null}>
                   <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => askDelete(editing)} disabled={saving || editing.active}>
                     <Trash2 className="size-4" />
-                    {t.platform.delete}
+                    {t.tenants.delete}
                   </Button>
                 </DisabledReason>
               </div>
@@ -919,7 +935,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               </Button>
               <Button type="submit" form="tenant-form" disabled={saving || !form.name.trim() || (!editing && !form.slug)}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-                {editing ? t.common.save : t.platform.create}
+                {editing ? t.common.save : t.tenants.create}
               </Button>
             </div>
           </DialogFooter>
@@ -929,17 +945,17 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       <Dialog open={deleting !== null} onOpenChange={(open) => (open || deleteBusy ? undefined : setDeleting(null))}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-destructive">{t.platform.deleteTitle}</DialogTitle>
+            <DialogTitle className="text-destructive">{t.tenants.deleteTitle}</DialogTitle>
           </DialogHeader>
           {deleting ? (
             <form id="delete-form" onSubmit={(event) => { event.preventDefault(); void confirmDelete(); }} className="flex flex-col gap-3 text-sm">
-              <p>{t.platform.deleteWarning.replace("{name}", deleting.name).replace("{program}", appName(deleting.app))}</p>
+              <p>{t.tenants.deleteWarning.replace("{name}", deleting.name).replace("{program}", appName(deleting.app))}</p>
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>{t.platform.deleteDatabase}</li>
-                <li>{t.platform.deleteFiles}</li>
-                <li>{t.platform.deleteRecord}</li>
+                <li>{t.tenants.deleteDatabase}</li>
+                <li>{t.tenants.deleteFiles}</li>
+                <li>{t.tenants.deleteRecord}</li>
               </ul>
-              <Field label={t.platform.deleteTypeCode.replace("{code}", deleting.slug)} htmlFor="delete-code" required>
+              <Field label={t.tenants.deleteTypeCode.replace("{code}", deleting.slug)} htmlFor="delete-code" required>
                 <Input id="delete-code" value={deleteCode} onChange={(e) => setDeleteCode(e.target.value.trim())} autoComplete="off" autoFocus disabled={deleteBusy} />
               </Field>
             </form>
@@ -950,7 +966,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             </Button>
             <Button type="submit" form="delete-form" variant="destructive" disabled={deleteBusy || !deleting || deleteCode !== deleting.slug}>
               {deleteBusy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
-              {t.platform.deletePermanently}
+              {t.tenants.deletePermanently}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -963,7 +979,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           </DialogHeader>
           {secret ? (
             <div className="flex flex-col gap-3 text-sm">
-              <p className="text-muted-foreground">{t.platform.createdHint}</p>
+              <p className="text-muted-foreground">{t.tenants.createdHint}</p>
               {secretRows(secret).map((row) => (
                 <div key={row.label} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
                   <div className="min-w-0">
@@ -972,11 +988,11 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   </div>
                   <div className="flex shrink-0 gap-1">
                     {row.link ? (
-                      <Button variant="ghost" size="icon-sm" aria-label={t.platform.open} title={t.platform.open} render={<a href={row.value} target="_blank" rel="noreferrer" />}>
+                      <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={row.value} target="_blank" rel="noreferrer" />}>
                         <ExternalLink className="size-4" />
                       </Button>
                     ) : null}
-                    <Button variant="ghost" size="icon-sm" aria-label={t.platform.copy} title={t.platform.copy} onClick={() => void copy(row.value)}>
+                    <Button variant="ghost" size="icon-sm" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(row.value)}>
                       <Copy className="size-4" />
                     </Button>
                   </div>
@@ -989,12 +1005,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                 }}
                 className="flex flex-col gap-2 rounded-md border border-dashed p-3"
               >
-                <Field label={t.platform.sendTo} htmlFor="credentials-mail" hint={secret.tenant.email ? undefined : t.platform.sendToHint}>
+                <Field label={t.tenants.sendTo} htmlFor="credentials-mail" hint={secret.tenant.email ? undefined : t.tenants.sendToHint}>
                   <div className="flex gap-2">
                     <Input id="credentials-mail" type="email" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder="ornek@kurum.com" disabled={mailing} />
                     <Button type="submit" variant="outline" disabled={mailing || !mailTo.trim()}>
                       {mailing ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                      {t.platform.sendMail}
+                      {t.tenants.sendMail}
                     </Button>
                   </div>
                 </Field>
@@ -1004,7 +1020,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <DialogFooter className="sm:justify-between">
             <Button variant="outline" onClick={() => (secret ? void copy(secretRows(secret).map((row) => `${row.label}: ${row.value}`).join("\n")) : undefined)}>
               <Copy className="size-4" />
-              {t.platform.copyAll}
+              {t.tenants.copyAll}
             </Button>
             <Button onClick={() => setSecret(null)}>{t.common.ok}</Button>
           </DialogFooter>

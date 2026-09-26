@@ -15,11 +15,11 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
   if (rateLimited(request, 20, 15 * 60 * 1000, "credentials")) return fail("rateLimited", 429);
   const params = await context.params;
   const app = findApp(params.app);
-  if (!app) return fail("platformUnknownApp", 400);
+  if (!app) return fail("unknownProgram", 400);
   const body = await readBody(request);
   const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  if (!EMAIL_PATTERN.test(to)) return fail("platformInvalidEmail", 400);
+  if (!EMAIL_PATTERN.test(to)) return fail("tenantInvalidEmail", 400);
   if (!password || password.length > 200) return fail("invalidRecord", 400);
   let tenant: TenantRecord | undefined;
   try {
@@ -30,12 +30,12 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
   }
   if (!tenant) return fail("notFound", 404);
   const address = `${(app.publicUrl ?? `${publicUrl()}${app.publicPath}`).replace(/\/+$/, "")}/${tenant.slug}`;
-  const m = tr.platform.credentialsMail;
+  const m = tr.tenants.credentialsMail;
   const fill = (text: string) => text.replace("{program}", app.name).replace("{name}", tenant.name);
   const rows: [string, string][] = [
-    [tr.platform.address, address],
-    [tr.platform.adminUser, "admin"],
-    [tr.platform.adminPassword, password],
+    [tr.tenants.address, address],
+    [tr.tenants.adminUser, "admin"],
+    [tr.tenants.adminPassword, password],
   ];
   try {
     await sendMail({
@@ -43,7 +43,7 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
       subject: fill(m.subject),
       text: `${fill(m.intro)}\n\n${rows.map(([label, value]) => `${label}: ${value}`).join("\n")}\n\n${m.changePassword}`,
       html: `<p>${escapeHtml(fill(m.intro))}</p><table cellpadding="6" style="border-collapse:collapse">${rows
-        .map(([label, value]) => `<tr><td style="color:#666">${escapeHtml(label)}</td><td><b>${label === tr.platform.address ? `<a href="${escapeHtml(value)}">${escapeHtml(value)}</a>` : escapeHtml(value)}</b></td></tr>`)
+        .map(([label, value]) => `<tr><td style="color:#666">${escapeHtml(label)}</td><td><b>${label === tr.tenants.address ? `<a href="${escapeHtml(value)}">${escapeHtml(value)}</a>` : escapeHtml(value)}</b></td></tr>`)
         .join("")}</table><p style="color:#666">${escapeHtml(m.changePassword)}</p>`,
     });
   } catch (error) {
