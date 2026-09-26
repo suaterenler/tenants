@@ -595,7 +595,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         </Card>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
           <span>{t.platform.total.replace("{count}", String(overview.total))}</span>
-          <div className="flex items-center gap-2">
+          <div className={overview.total > PAGE_SIZES[0] ? "flex items-center gap-2" : "hidden"}>
             <span>{t.platform.pageSize}</span>
             <div className="w-20">
               <OptionSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} options={PAGE_SIZES.map((size) => ({ value: String(size), label: String(size) }))} ariaLabel={t.platform.pageSize} />
