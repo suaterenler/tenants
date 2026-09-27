@@ -21,7 +21,8 @@ export function programList(): Program[] {
   return [
     { key: "education", name: "Eğitim", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education", rootUrl: process.env.EDUCATION_ROOT_URL?.trim() || "http://127.0.0.1:3143", hostOnly: false },
     { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon", rootUrl: process.env.SALON_ROOT_URL?.trim() || "http://127.0.0.1:3144", hostOnly: false },
-    { key: "cms", name: "CMS", publicPath: "", publicUrl: null, agentUrl: process.env.CMS_URL?.trim() || "http://127.0.0.1:3145", rootUrl: process.env.CMS_ROOT_URL?.trim() || "http://127.0.0.1:3145", hostOnly: true },
+    { key: "cms", name: "CMS", publicPath: "/cms", publicUrl: process.env.CMS_PUBLIC_URL?.trim() || null, agentUrl: process.env.CMS_URL?.trim() || "http://127.0.0.1:3145", rootUrl: process.env.CMS_ROOT_URL?.trim() || "http://127.0.0.1:3145", hostOnly: false },
+    { key: "ecommerce", name: "E-Ticaret", publicPath: "/ecommerce", publicUrl: process.env.ECOMMERCE_PUBLIC_URL?.trim() || null, agentUrl: process.env.ECOMMERCE_URL?.trim() || "http://127.0.0.1:3146", rootUrl: process.env.ECOMMERCE_ROOT_URL?.trim() || "http://127.0.0.1:3146", hostOnly: false },
   ];
 }
 

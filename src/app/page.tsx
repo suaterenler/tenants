@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -804,10 +804,24 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       disabled={editing !== null || saving}
                     />
                   </Field>
-                  <Field label={t.tenants.slug} htmlFor="tenant-slug" required hint={editing ? undefined : t.tenants.slugHint}>
+                  <Field
+                    label={t.tenants.slug}
+                    htmlFor="tenant-slug"
+                    required
+                    labelExtra={
+                      editing ? undefined : (
+                        <Tooltip>
+                          <TooltipTrigger render={<button type="button" aria-label={t.tenants.slugHint} className="ml-1 inline-flex text-muted-foreground hover:text-foreground" onClick={(event) => event.preventDefault()} />}>
+                            <Info className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipContent>{t.tenants.slugHint}</TooltipContent>
+                        </Tooltip>
+                      )
+                    }
+                  >
                     <Input id="tenant-slug" value={form.slug} onChange={(e) => patch({ slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "") })} disabled={editing !== null || saving} maxLength={40} />
                   </Field>
-                  <div className={editing ? undefined : "sm:col-span-2"}>
+                  <div className="sm:col-span-2">
                     <Field label={t.tenants.name} htmlFor="tenant-name" required>
                       <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
                     </Field>
@@ -820,6 +834,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       </label>
                     </Field>
                   ) : null}
+                  <Field label={t.tenants.expiresAt}>
+                    <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
+                  </Field>
                   {form.slug && !tenantAddress(overview.apps, form.app, form.slug, editing?.domains) ? (
                     <p className="text-xs text-muted-foreground sm:col-span-2">{t.tenants.noAddress}</p>
                   ) : form.slug ? (
@@ -850,15 +867,14 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <Field label={t.tenants.contactName} htmlFor="tenant-contact">
                     <Input id="tenant-contact" value={form.contactName} onChange={(e) => patch({ contactName: e.target.value })} disabled={saving} />
                   </Field>
-                  <Field label={t.tenants.phone}>
-                    <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
-                  </Field>
                   <Field label={t.tenants.email} htmlFor="tenant-email">
                     <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
                   </Field>
-                  <Field label={t.tenants.expiresAt}>
-                    <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
-                  </Field>
+                  <div className="sm:col-span-2">
+                    <Field label={t.tenants.phone}>
+                      <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
+                    </Field>
+                  </div>
                 </section>
               </TabsContent>
 
