@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Archive, Building2, ChevronLeft, ChevronRight, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { Archive, ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -22,6 +22,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
 const BASE_PATH = "/admin";
@@ -30,6 +31,8 @@ const PAGE_SIZES = [25, 50, 100];
 const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
 type ProgramModule = { key: string; label: string };
+type TenantSort = "name" | "app" | "expiresAt" | "status";
+type SortDir = "asc" | "desc";
 type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
 type Tenant = {
   app: string;
@@ -51,7 +54,7 @@ type Secret = { title: string; tenant: Tenant; password: string };
 type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[]; domains: string };
 type ApiBody<T> = { ok: true; data: T } | { ok: false; error: string };
 
-const EMPTY_FORM: Form = { app: "education", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [], domains: "" };
+const EMPTY_FORM: Form = { app: "", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [], domains: "" };
 
 function readToken(): string | null {
   try {
@@ -112,6 +115,18 @@ async function adminFetch<T>(path: string, init: { method?: string; body?: unkno
   if (!payload) throw new AdminRequestError(`HTTP ${response.status}`, response.status);
   if (!payload.ok) throw new AdminRequestError(payload.error, response.status);
   return payload.data;
+}
+
+async function adminUpload(path: string, file: File): Promise<void> {
+  const response = await fetch(`${BASE_PATH}/api${path}`, {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/zip" },
+    body: file,
+    cache: "no-store",
+  });
+  const payload = (await response.json().catch(() => null)) as ApiBody<unknown> | null;
+  if (!payload) throw new AdminRequestError(`HTTP ${response.status}`, response.status);
+  if (!payload.ok) throw new AdminRequestError(payload.error, response.status);
 }
 
 function tenantAddress(apps: AppInfo[], app: string, slug: string, domains: string[] = []): string {
@@ -335,6 +350,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const confirm = useConfirm();
   const [overview, setOverview] = useState<Overview>(EMPTY_OVERVIEW);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -342,6 +358,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [appFilter, setAppFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState<TenantSort>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY_FORM);
@@ -353,6 +371,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [deleteCode, setDeleteCode] = useState("");
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
   const [mailTo, setMailTo] = useState("");
   const [mailing, setMailing] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -375,6 +395,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (appFilter) params.set("app", appFilter);
       if (statusFilter) params.set("status", statusFilter);
+      params.set("sort", sort);
+      params.set("dir", sortDir);
       if (paged) {
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
@@ -382,7 +404,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       const value = params.toString();
       return value ? `?${value}` : "";
     },
-    [debouncedSearch, appFilter, statusFilter, page, pageSize],
+    [debouncedSearch, appFilter, statusFilter, sort, sortDir, page, pageSize],
   );
 
   const load = useCallback(
@@ -424,6 +446,21 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       handleError(error);
     } finally {
       setDownloading(null);
+    }
+  }
+
+  async function restoreDatabase(tenant: Tenant, file: File) {
+    const message = t.tenants.restoreConfirm.replace("{name}", tenant.name).replace("{file}", file.name);
+    const ok = await confirm({ message, confirmText: t.tenants.restore, danger: true });
+    if (!ok) return;
+    setRestoring(true);
+    try {
+      await adminUpload(`/tenants/${tenant.app}/${tenant.slug}/restore/database`, file);
+      toast.success(t.tenants.restored);
+    } catch (error) {
+      handleError(error);
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -477,15 +514,35 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   const appName = useCallback((key: string) => overview.apps.find((app) => app.key === key)?.name ?? key, [overview.apps]);
 
+  function toggleSort(key: TenantSort) {
+    if (sort === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else {
+      setSort(key);
+      setSortDir("asc");
+    }
+    setPage(1);
+  }
+
+  function sortHead(key: TenantSort, label: string, className?: string) {
+    const active = sort === key;
+    return (
+      <TableHead className={className} aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+        <button type="button" className="inline-flex cursor-pointer items-center gap-1 hover:text-foreground" onClick={() => toggleSort(key)}>
+          {label}
+          {active ? (sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />) : <ChevronsUpDown className="size-3 opacity-40" />}
+        </button>
+      </TableHead>
+    );
+  }
+
   const rows = overview.rows;
 
   const formApp = overview.apps.find((app) => app.key === form.app);
 
   function openCreate() {
-    const firstOnline = overview.apps.find((app) => app.online)?.key ?? "education";
     setEditing(null);
     setTab("general");
-    setForm({ ...EMPTY_FORM, app: appFilter || firstOnline });
+    setForm(EMPTY_FORM);
     setDialogOpen(true);
   }
 
@@ -536,7 +593,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         toast.success(t.tenants.saved);
         setDialogOpen(false);
       } else {
-        const result = await adminFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug } });
+        const result = await adminFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug, active: form.active } });
         setDialogOpen(false);
         showSecret({ title: t.tenants.created, tenant: result.tenant, password: result.adminPassword });
       }
@@ -642,8 +699,19 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <div className="w-44">
             <OptionSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} ariaLabel={t.tenants.status} />
           </div>
-          <Button variant="outline" size="icon" onClick={() => void load()} aria-label={t.tenants.refresh} title={t.tenants.refresh}>
-            <RefreshCw className="size-4" />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => {
+              setRefreshing(true);
+              const minimum = new Promise((resolve) => window.setTimeout(resolve, 600));
+              void Promise.all([load(), minimum]).finally(() => setRefreshing(false));
+            }}
+            disabled={refreshing}
+            aria-label={t.tenants.refresh}
+            title={t.tenants.refresh}
+          >
+            <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
           </Button>
           <Button variant="outline" onClick={() => void calculateUsage()} disabled={calculating || overview.total === 0}>
             {calculating ? <Loader2 className="size-4 animate-spin" /> : <HardDrive className="size-4" />}
@@ -660,20 +728,20 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         </div>
         <Card>
           <CardContent className="p-0">
-            <Table>
+            <Table className={refreshing ? "opacity-60 transition-opacity" : "transition-opacity"}>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t.tenants.program}</TableHead>
-                  <TableHead>{t.tenants.name}</TableHead>
+                  {sortHead("app", t.tenants.program)}
+                  {sortHead("name", t.tenants.name)}
                   <TableHead>{t.tenants.contact}</TableHead>
-                  <TableHead>{t.tenants.expiresAt}</TableHead>
+                  {sortHead("expiresAt", t.tenants.expiresAt)}
                   {usage ? <TableHead className="text-right">{t.tenants.size}</TableHead> : null}
-                  <TableHead className="w-24">{t.tenants.status}</TableHead>
+                  {sortHead("status", t.tenants.status, "w-24")}
                   <TableHead className="w-48" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                 {loading || refreshing ? (
                   <TableRow>
                     <TableCell colSpan={columnCount} className="py-8 text-center">
                       <Loader2 className="mx-auto size-5 animate-spin text-muted-foreground" />
@@ -688,6 +756,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                 ) : (
                   rows.map((tenant) => {
                     const expired = isExpired(tenant, today);
+                    const daysLeft = tenant.expiresAt ? Math.round((Date.parse(tenant.expiresAt) - Date.parse(today)) / 86_400_000) : null;
                     return (
                       <TableRow key={`${tenant.app}:${tenant.slug}`}>
                         <TableCell>
@@ -709,9 +778,17 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell className="text-sm">
                           {tenant.expiresAt ? (
-                            <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.tenants.expiredHint : undefined}>
-                              {formatDate(tenant.expiresAt, locale)}
-                              {expired ? ` · ${t.tenants.expired}` : ""}
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.tenants.expiredHint : undefined}>
+                                {formatDate(tenant.expiresAt, locale)}
+                              </span>
+                              {expired ? (
+                                <Badge variant="destructive">{t.tenants.expired}</Badge>
+                              ) : daysLeft !== null ? (
+                                <Badge variant="outline" className={daysLeft <= 30 ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
+                                  {t.tenants.daysLeft.replace("{days}", String(daysLeft))}
+                                </Badge>
+                              ) : null}
                             </span>
                           ) : (
                             <span className="text-muted-foreground">{t.tenants.noExpiry}</span>
@@ -800,6 +877,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       value={form.app}
                       onChange={(value) => patch({ app: value, disabledModules: [] })}
                       options={overview.apps.filter((app) => app.online).map((app) => ({ value: app.key, label: app.name }))}
+                      emptyLabel={t.tenants.programPlaceholder}
                       ariaLabel={t.tenants.program}
                       disabled={editing !== null || saving}
                     />
@@ -826,34 +904,34 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       <Input id="tenant-name" value={form.name} onChange={(e) => patch({ name: e.target.value })} disabled={saving} />
                     </Field>
                   </div>
-                  {editing ? (
-                    <Field label={t.tenants.status}>
-                      <label className="flex h-9 items-center justify-between gap-2 rounded-md border px-3 text-sm">
-                        <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.tenants.active : t.tenants.passive}</span>
-                        <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
-                      </label>
-                    </Field>
-                  ) : null}
                   <Field label={t.tenants.expiresAt}>
                     <DatePicker value={form.expiresAt} onChange={(value) => patch({ expiresAt: value })} disabled={saving} />
                   </Field>
-                  {form.slug && !tenantAddress(overview.apps, form.app, form.slug, editing?.domains) ? (
-                    <p className="text-xs text-muted-foreground sm:col-span-2">{t.tenants.noAddress}</p>
-                  ) : form.slug ? (
-                    <div className="flex items-center gap-1 sm:col-span-2">
-                      {editing ? (
-                        <a href={tenantAddress(overview.apps, form.app, form.slug, editing?.domains)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
-                          <ExternalLink className="size-3 shrink-0" />
-                          {tenantAddress(overview.apps, form.app, form.slug, editing?.domains)}
-                        </a>
-                      ) : (
-                        <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
-                      )}
-                      <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug, editing?.domains))}>
-                        <Copy className="size-3" />
-                      </Button>
-                    </div>
-                  ) : null}
+                  <Field label={t.tenants.status}>
+                    <label className="flex h-9 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm dark:bg-input/30">
+                      <span className={form.active ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-muted-foreground"}>{form.active ? t.tenants.active : t.tenants.passive}</span>
+                      <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
+                    </label>
+                  </Field>
+                  <div className="flex min-h-6 items-center gap-1 sm:col-span-2">
+                    {form.slug && !tenantAddress(overview.apps, form.app, form.slug, editing?.domains) ? (
+                      <span className="text-xs text-muted-foreground">{t.tenants.noAddress}</span>
+                    ) : form.slug ? (
+                      <>
+                        {editing ? (
+                          <a href={tenantAddress(overview.apps, form.app, form.slug, editing?.domains)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
+                            <ExternalLink className="size-3 shrink-0" />
+                            {tenantAddress(overview.apps, form.app, form.slug, editing?.domains)}
+                          </a>
+                        ) : (
+                          <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
+                        )}
+                        <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug, editing?.domains))}>
+                          <Copy className="size-3" />
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                   <div className="sm:col-span-2">
                         <Field label={t.tenants.domains} htmlFor="tenant-domains" hint={t.tenants.domainsHint}>
                           <Textarea id="tenant-domains" rows={2} value={form.domains} onChange={(e) => patch({ domains: e.target.value })} placeholder="merhaba.com&#10;salon.merhaba.com" disabled={saving} className="font-mono text-xs" />
@@ -870,11 +948,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <Field label={t.tenants.email} htmlFor="tenant-email">
                     <Input id="tenant-email" type="email" value={form.email} onChange={(e) => patch({ email: e.target.value })} disabled={saving} />
                   </Field>
-                  <div className="sm:col-span-2">
-                    <Field label={t.tenants.phone}>
-                      <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
-                    </Field>
-                  </div>
+                  <Field label={t.tenants.phone}>
+                    <PhoneInput value={form.phone} onChange={(value) => patch({ phone: value })} disabled={saving} />
+                  </Field>
                 </section>
               </TabsContent>
 
@@ -908,9 +984,24 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                           {t.tenants.database}
                         </div>
                         <p className="text-xs text-muted-foreground">{t.tenants.backupDatabaseHint}</p>
-                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "database")} disabled={downloading !== null}>
+                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "database")} disabled={downloading !== null || restoring}>
                           {downloading === `${editing.app}:${editing.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
                           {t.tenants.downloadDatabase}
+                        </Button>
+                        <input
+                          ref={restoreInputRef}
+                          type="file"
+                          accept=".zip"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0] ?? null;
+                            event.target.value = "";
+                            if (file) void restoreDatabase(editing, file);
+                          }}
+                        />
+                        <Button type="button" variant="outline" className="text-destructive hover:text-destructive" onClick={() => restoreInputRef.current?.click()} disabled={downloading !== null || restoring}>
+                          {restoring ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}
+                          {t.tenants.restoreDatabase}
                         </Button>
                       </div>
                       <div className="flex flex-col gap-3 rounded-lg border p-4">
@@ -919,7 +1010,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                           {t.tenants.files}
                         </div>
                         <p className="text-xs text-muted-foreground">{t.tenants.backupFilesHint}</p>
-                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "files")} disabled={downloading !== null}>
+                        <Button type="button" variant="outline" onClick={() => void downloadBackup(editing, "files")} disabled={downloading !== null || restoring}>
                           {downloading === `${editing.app}:${editing.slug}:files` ? <Loader2 className="size-4 animate-spin" /> : <Archive className="size-4" />}
                           {t.tenants.downloadFiles}
                         </Button>
@@ -958,7 +1049,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
                 {t.common.cancel}
               </Button>
-              <Button type="submit" form="tenant-form" disabled={saving || !form.name.trim() || (!editing && !form.slug)}>
+              <Button type="submit" form="tenant-form" disabled={saving || !form.app || !form.name.trim() || (!editing && !form.slug)}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : null}
                 {editing ? t.common.save : t.tenants.create}
               </Button>

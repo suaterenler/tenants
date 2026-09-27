@@ -49,6 +49,13 @@ export function tenantsSecret(): string {
   return value;
 }
 
+async function parseAgentBody<T>(response: Response): Promise<T> {
+  const payload = (await response.json().catch(() => null)) as AgentBody<T> | null;
+  if (!payload) throw new AgentError("programUnavailable", `HTTP ${response.status}`, 502);
+  if (!payload.ok) throw new AgentError((payload.code ?? "programUnavailable").replace(/^errors\./, "").replace(/^platform/, "tenant"), payload.error, response.status);
+  return payload.data;
+}
+
 export async function agentCall<T>(app: Program, path: string, init: { method?: string; body?: unknown; timeoutMs?: number } = {}): Promise<T> {
   let response: Response;
   try {
@@ -63,10 +70,24 @@ export async function agentCall<T>(app: Program, path: string, init: { method?: 
     if (error instanceof AgentError) throw error;
     throw new AgentError("programUnavailable", "unreachable", 502);
   }
-  const payload = (await response.json().catch(() => null)) as AgentBody<T> | null;
-  if (!payload) throw new AgentError("programUnavailable", `HTTP ${response.status}`, 502);
-  if (!payload.ok) throw new AgentError((payload.code ?? "programUnavailable").replace(/^errors\./, "").replace(/^platform/, "tenant"), payload.error, response.status);
-  return payload.data;
+  return parseAgentBody<T>(response);
+}
+
+export async function agentSend<T>(app: Program, path: string, body: ArrayBuffer, timeoutMs = 10 * 60 * 1000): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${app.agentUrl}/admin/api/agent${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tenantsSecret()}`, "Content-Type": "application/zip" },
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
+      cache: "no-store",
+    });
+  } catch (error) {
+    if (error instanceof AgentError) throw error;
+    throw new AgentError("programUnavailable", "unreachable", 502);
+  }
+  return parseAgentBody<T>(response);
 }
 
 export async function overview(): Promise<{ apps: ProgramInfo[]; tenants: ProgramTenant[] }> {
