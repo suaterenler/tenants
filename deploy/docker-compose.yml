@@ -21,10 +21,10 @@ services:
       TENANTS_SECRET: ${TENANTS_SECRET:-${PLATFORM_SECRET:-}}
       PLATFORM_SECRET: ${PLATFORM_SECRET:-}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
-      EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3043/education}
-      SALON_URL: ${SALON_URL:-http://127.0.0.1:3044/salon}
-      EDUCATION_ROOT_URL: ${EDUCATION_ROOT_URL:-http://127.0.0.1:3143}
-      SALON_ROOT_URL: ${SALON_ROOT_URL:-http://127.0.0.1:3144}
+      EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3052/education}
+      SALON_URL: ${SALON_URL:-http://127.0.0.1:3054/salon}
+      EDUCATION_ROOT_URL: ${EDUCATION_ROOT_URL:-http://127.0.0.1:3053}
+      SALON_ROOT_URL: ${SALON_ROOT_URL:-http://127.0.0.1:3055}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-suaterenler@gmail.com}
       PUBLIC_URL: ${PUBLIC_URL:-https://app.erenleryazilim.com}
       MAIL_FROM: ${MAIL_FROM:-Erenler Yönetim <noreply@erenleryazilim.com>}
@@ -50,7 +50,7 @@ services:
       timeout: 5s
       retries: 5
     environment:
-      EDGE_PORT: ${EDGE_PORT:-3060}
+      EDGE_PORT: ${EDGE_PORT:-3051}
       TENANTS_INTERNAL_URL: http://127.0.0.1:${APP_PORT:-3050}/admin
       TENANTS_SECRET: ${TENANTS_SECRET:-${PLATFORM_SECRET:-}}
 

@@ -1,6 +1,6 @@
 import http from "node:http";
 
-const PORT = Number(process.env.EDGE_PORT ?? 3060);
+const PORT = Number(process.env.EDGE_PORT ?? 3051);
 const HOST = process.env.EDGE_HOST ?? "127.0.0.1";
 const SOURCE = `${(process.env.TENANTS_INTERNAL_URL ?? "http://127.0.0.1:3050/admin").replace(/\/+$/, "")}/api/domains`;
 const SECRET = (process.env.TENANTS_SECRET ?? process.env.PLATFORM_SECRET ?? "").trim();
