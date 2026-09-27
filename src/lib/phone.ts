@@ -2,6 +2,7 @@ import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { DEFAULT_PHONE_COUNTRY, phoneCountryOfCode, type PhoneCountry } from "./countries";
 
 const TR_NATIONAL_GROUPS = [3, 3, 2, 2];
+const CC_FREE_NATIONAL = new Set(["TR"]);
 
 export function digitsOnly(value: string): string {
   return value.replace(/\D/g, "");
@@ -35,7 +36,7 @@ export function storagePhone(national: string, countryCode: string = DEFAULT_PHO
   const country = phoneCountryOfCode(countryCode);
   let digits = digitsOnly(national).replace(/^0+/, "");
   if (digits === "") return "";
-  if (digits.startsWith(country.cc) && digits.length > country.nationalMax) digits = digits.slice(country.cc.length).replace(/^0+/, "");
+  if (digits.startsWith(country.cc) && (digits.length > country.nationalMax || CC_FREE_NATIONAL.has(country.code))) digits = digits.slice(country.cc.length).replace(/^0+/, "");
   return (country.cc + digits.slice(0, country.nationalMax)).slice(0, 15);
 }
 
