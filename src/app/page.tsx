@@ -802,7 +802,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                           <div className="flex justify-end gap-1">
                             {tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains) ? (
                               <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains)} target="_blank" rel="noreferrer" />}>
-                                <ExternalLink className="size-4" />
+                                <ExternalLink className="size-4 text-emerald-600 dark:text-emerald-400" />
                               </Button>
                             ) : (
                               <Button variant="ghost" size="icon-sm" aria-label={t.tenants.noAddress} title={t.tenants.noAddress} disabled>
