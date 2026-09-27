@@ -138,6 +138,8 @@ export const en: Messages = {
   },
   auth: {
     madeBy: "Developed by {company}",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
   },
   panel: {
     theme: "Theme",

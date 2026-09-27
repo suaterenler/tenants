@@ -9,6 +9,7 @@ import { MadeBy } from "@/components/made-by";
 import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { DatePicker } from "@/components/panel/date-picker";
 import { Field } from "@/components/panel/field";
+import { PasswordInput } from "@/components/panel/password-input";
 import { OptionSelect } from "@/components/panel/option-select";
 import { PhoneInput } from "@/components/panel/phone-input";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -255,7 +256,7 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => void }) {
     <AuthShell>
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
         <Field label={t.tenants.password} htmlFor="admin-password" required>
-          <Input id="admin-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" autoFocus />
+          <PasswordInput id="admin-password" value={password} onChange={setPassword} autoComplete="current-password" autoFocus />
         </Field>
         <Button type="submit" disabled={submitting || !password}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -328,10 +329,10 @@ function PasswordReset({ token, onDone }: { token: string; onDone: () => void })
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
         <p className="text-center text-sm font-medium">{t.tenants.resetTitle}</p>
         <Field label={t.tenants.newPassword} htmlFor="new-password" required hint={t.tenants.passwordHint}>
-          <Input id="new-password" type="password" clearable={false} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" autoFocus />
+          <PasswordInput id="new-password" value={password} onChange={setPassword} autoFocus />
         </Field>
         <Field label={t.tenants.newPasswordRepeat} htmlFor="new-password-repeat" required hint={mismatch ? t.tenants.passwordMismatch : undefined}>
-          <Input id="new-password-repeat" type="password" clearable={false} value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" aria-invalid={mismatch} />
+          <PasswordInput id="new-password-repeat" value={repeat} onChange={setRepeat} invalid={mismatch} />
         </Field>
         <Button type="submit" disabled={submitting || !password || password !== repeat}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}

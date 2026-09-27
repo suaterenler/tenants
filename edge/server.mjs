@@ -96,8 +96,15 @@ const server = http.createServer(async (request, response) => {
     return;
   }
   const route = await resolve(host);
-  if (!route) return notConfigured(response, host);
-  forward(request, response, route, host);
+  if (route) return forward(request, response, route, host);
+  if (host.startsWith("www.") && (await resolve(host.slice(4)))) {
+    response.writeHead(301, { Location: `https://${host.slice(4)}${request.url ?? "/"}`, "Cache-Control": "no-store" });
+    response.end();
+    return;
+  }
+  const wwwRoute = host.startsWith("www.") ? null : await resolve(`www.${host}`);
+  if (wwwRoute) return forward(request, response, wwwRoute, host);
+  notConfigured(response, host);
 });
 
 server.keepAliveTimeout = 65_000;

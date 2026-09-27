@@ -136,6 +136,8 @@ export const tr = {
   },
   auth: {
     madeBy: "{company} tarafından geliştirildi",
+    showPassword: "Şifreyi göster",
+    hidePassword: "Şifreyi gizle",
   },
   panel: {
     theme: "Tema",
