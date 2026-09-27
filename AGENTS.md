@@ -25,7 +25,7 @@ Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten u
 - Commit/push yalnızca kullanıcı onayıyla; mesajlar kısa ve İngilizce
 
 ## Yayın
-- master'a push → GitHub Actions → `ghcr.io/suaterenler/tenants` (app + edge aynı imaj)
+- main'e push → GitHub Actions → `ghcr.io/suaterenler/tenants` (app + edge aynı imaj)
 - Sunucu: `/home/erenler/app.erenleryazilim.com/tenants/` (compose: `app` 127.0.0.1:3050, `edge` 127.0.0.1:3060; .env; update.sh; cron 2 dk)
 - `TENANTS_SECRET` Education ve Salon `.env` ile aynı olmalı
 
