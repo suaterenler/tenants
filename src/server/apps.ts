@@ -13,14 +13,15 @@ export type TenantRecord = {
   domains: string[];
   createdAt: string;
 };
-export type Program = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string; rootUrl: string };
-export type ProgramInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: ProgramModule[] };
+export type Program = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string; rootUrl: string; hostOnly: boolean };
+export type ProgramInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
 export type ProgramTenant = TenantRecord & { app: string };
 
 export function programList(): Program[] {
   return [
-    { key: "education", name: "Education", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education", rootUrl: process.env.EDUCATION_ROOT_URL?.trim() || "http://127.0.0.1:3143" },
-    { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon", rootUrl: process.env.SALON_ROOT_URL?.trim() || "http://127.0.0.1:3144" },
+    { key: "education", name: "Education", publicPath: "/education", publicUrl: process.env.EDUCATION_PUBLIC_URL?.trim() || null, agentUrl: process.env.EDUCATION_URL?.trim() || "http://127.0.0.1:3043/education", rootUrl: process.env.EDUCATION_ROOT_URL?.trim() || "http://127.0.0.1:3143", hostOnly: false },
+    { key: "salon", name: "Salon", publicPath: "/salon", publicUrl: process.env.SALON_PUBLIC_URL?.trim() || null, agentUrl: process.env.SALON_URL?.trim() || "http://127.0.0.1:3044/salon", rootUrl: process.env.SALON_ROOT_URL?.trim() || "http://127.0.0.1:3144", hostOnly: false },
+    { key: "cms", name: "CMS", publicPath: "", publicUrl: null, agentUrl: process.env.CMS_URL?.trim() || "http://127.0.0.1:3145", rootUrl: process.env.CMS_ROOT_URL?.trim() || "http://127.0.0.1:3145", hostOnly: true },
   ];
 }
 
@@ -72,9 +73,9 @@ export async function overview(): Promise<{ apps: ProgramInfo[]; tenants: Progra
     programList().map(async (app) => {
       try {
         const [records, modules] = await Promise.all([agentCall<TenantRecord[]>(app, "/tenants"), agentCall<ProgramModule[]>(app, "/modules")]);
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: true, modules }, tenants: records.map((record) => ({ ...record, domains: record.domains ?? [], app: app.key })) };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, hostOnly: app.hostOnly, online: true, modules }, tenants: records.map((record) => ({ ...record, domains: record.domains ?? [], app: app.key })) };
       } catch {
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, online: false, modules: [] }, tenants: [] };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, hostOnly: app.hostOnly, online: false, modules: [] }, tenants: [] };
       }
     }),
   );
@@ -110,4 +111,10 @@ export async function domainConflict(domains: string[], app: string, slug: strin
   const { tenants } = await overview();
   const owner = tenants.find((tenant) => !(tenant.app === app && tenant.slug === slug) && tenant.domains.some((domain) => domains.includes(domain)));
   return owner ? owner.domains.find((domain) => domains.includes(domain)) ?? null : null;
+}
+
+export function tenantPublicAddress(app: Pick<Program, "publicUrl" | "publicPath" | "hostOnly">, origin: string, slug: string, domains: string[] = []): string {
+  if (domains[0]) return `https://${domains[0]}`;
+  if (app.hostOnly) return "";
+  return `${(app.publicUrl ?? `${origin.replace(/\/+$/, "")}${app.publicPath}`).replace(/\/+$/, "")}/${slug}`;
 }

@@ -166,6 +166,7 @@ export const tr = {
     copyAll: "Tümünü Kopyala",
     copied: "Kopyalandı",
     open: "Aç",
+    noAddress: "Bu program alan adıyla çalışır; adres için Genel sekmesinde alan adı tanımlayın.",
     empty: "Henüz kurum yok.",
     deactivateConfirm: "\"{name}\" pasifleştirilsin mi? Adresi erişilemez olur, verileri silinmez.",
     program: "Program",

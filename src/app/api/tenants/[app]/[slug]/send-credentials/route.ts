@@ -1,5 +1,5 @@
 import { tr } from "@messages/tr";
-import { AgentError, agentCall, findApp, type TenantRecord } from "@/server/apps";
+import { AgentError, agentCall, findApp, tenantPublicAddress, type TenantRecord } from "@/server/apps";
 import { fail, ok, rateLimited, readBody, requireSession } from "@/server/auth";
 import { maskEmail, publicUrl, sendMail } from "@/server/mail";
 
@@ -29,7 +29,7 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
     throw error;
   }
   if (!tenant) return fail("notFound", 404);
-  const address = `${(app.publicUrl ?? `${publicUrl()}${app.publicPath}`).replace(/\/+$/, "")}/${tenant.slug}`;
+  const address = tenantPublicAddress(app, publicUrl(), tenant.slug, tenant.domains ?? []) || tr.tenants.noAddress;
   const m = tr.tenants.credentialsMail;
   const fill = (text: string) => text.replace("{program}", app.name).replace("{name}", tenant.name);
   const rows: [string, string][] = [

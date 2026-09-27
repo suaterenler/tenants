@@ -30,7 +30,7 @@ const PAGE_SIZES = [25, 50, 100];
 const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
 type ProgramModule = { key: string; label: string };
-type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; online: boolean; modules: ProgramModule[] };
+type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
 type Tenant = {
   app: string;
   slug: string;
@@ -117,6 +117,7 @@ async function adminFetch<T>(path: string, init: { method?: string; body?: unkno
 function tenantAddress(apps: AppInfo[], app: string, slug: string, domains: string[] = []): string {
   if (domains[0]) return `https://${domains[0]}`;
   const info = apps.find((item) => item.key === app);
+  if (info?.hostOnly) return "";
   if (info?.publicUrl) return `${info.publicUrl.replace(/\/+$/, "")}/${slug}`;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
   return `${origin}${info?.publicPath ?? `/${app}`}/${slug}`;
@@ -591,7 +592,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   function secretRows(value: Secret): { label: string; value: string; link: boolean }[] {
     return [
-      { label: t.tenants.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains), link: true },
+      { label: t.tenants.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains) || t.tenants.noAddress, link: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains) !== "" },
       { label: t.tenants.adminUser, value: "admin", link: false },
       { label: t.tenants.adminPassword, value: value.password, link: false },
     ];
@@ -722,9 +723,15 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains)} target="_blank" rel="noreferrer" />}>
-                              <ExternalLink className="size-4" />
-                            </Button>
+                            {tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains) ? (
+                              <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains)} target="_blank" rel="noreferrer" />}>
+                                <ExternalLink className="size-4" />
+                              </Button>
+                            ) : (
+                              <Button variant="ghost" size="icon-sm" aria-label={t.tenants.noAddress} title={t.tenants.noAddress} disabled>
+                                <ExternalLink className="size-4" />
+                              </Button>
+                            )}
                             <Button variant="ghost" size="icon-sm" aria-label={t.tenants.downloadDatabase} title={t.tenants.downloadDatabase} disabled={downloading !== null} onClick={() => void confirmBackup(tenant, "database")}>
                               {downloading === `${tenant.app}:${tenant.slug}:database` ? <Loader2 className="size-4 animate-spin" /> : <DatabaseArrowDown className="size-4" />}
                             </Button>
@@ -813,7 +820,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       </label>
                     </Field>
                   ) : null}
-                  {form.slug ? (
+                  {form.slug && !tenantAddress(overview.apps, form.app, form.slug, editing?.domains) ? (
+                    <p className="text-xs text-muted-foreground sm:col-span-2">{t.tenants.noAddress}</p>
+                  ) : form.slug ? (
                     <div className="flex items-center gap-1 sm:col-span-2">
                       {editing ? (
                         <a href={tenantAddress(overview.apps, form.app, form.slug, editing?.domains)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">

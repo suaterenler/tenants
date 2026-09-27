@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { tr } from "@messages/tr";
-import { overview } from "@/server/apps";
+import { overview, tenantPublicAddress } from "@/server/apps";
 import { requireSession } from "@/server/auth";
 import { filterTenants, isExpired, parseTenantQuery, todayIn } from "@/server/tenant-query";
 
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
       [t.expiresAt]: displayDate(tenant.expiresAt),
       [t.status]: isExpired(tenant, today) ? t.expired : tenant.active ? t.active : t.passive,
       [t.createdAt]: tenant.createdAt.startsWith("1970") ? "" : displayDate(tenant.createdAt),
-      [t.address]: `${(app?.publicUrl ?? `${origin}${app?.publicPath ?? `/${tenant.app}`}`).replace(/\/+$/, "")}/${tenant.slug}`,
+      [t.address]: app ? tenantPublicAddress(app, origin, tenant.slug, tenant.domains) : "",
     };
   });
   const sheet = XLSX.utils.json_to_sheet(rows);

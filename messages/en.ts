@@ -168,6 +168,7 @@ export const en: Messages = {
     copyAll: "Copy All",
     copied: "Copied",
     open: "Open",
+    noAddress: "This program runs on custom domains; add a domain in the General tab to get an address.",
     empty: "No institutions yet.",
     deactivateConfirm: "Deactivate \"{name}\"? Its address becomes unavailable; data is not deleted.",
     program: "Program",
