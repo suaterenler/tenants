@@ -55,12 +55,13 @@ export function sameCommit(a: string | null | undefined, b: string | null | unde
 
 const DEV = process.env.NODE_ENV === "development";
 
-function localCommit(): string | null {
-  if (!DEV) return null;
+function localBuild(): BuildInfo {
+  if (!DEV) return NO_INFO;
   try {
-    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim() || null;
+    const [commit, builtAt] = execFileSync("git", ["log", "-1", "--format=%h%n%cI"], { encoding: "utf8" }).trim().split(/\r?\n/);
+    return { commit: commit || null, builtAt: builtAt || null };
   } catch {
-    return null;
+    return NO_INFO;
   }
 }
 
@@ -71,7 +72,8 @@ function localExpected(running: BuildInfo | null, release: Release | undefined):
 
 export async function programVersions(): Promise<ProgramVersion[]> {
   const releases = await readReleases();
-  const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || localCommit(), builtAt: process.env.APP_BUILD_DATE?.trim() || null };
+  const local = localBuild();
+  const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || local.commit, builtAt: process.env.APP_BUILD_DATE?.trim() || local.builtAt };
   const programs = await Promise.all(
     programList().map(async (app) => {
       const running = await agentCall<BuildInfo>(app, "/version", { timeoutMs: 5000 }).catch((error: unknown) => (error instanceof AgentError && (error.status === 404 || error.message.startsWith("HTTP ")) ? NO_INFO : null));

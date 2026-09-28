@@ -51,7 +51,7 @@ type Tenant = {
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type BuildInfo = { commit: string | null; builtAt: string | null };
-type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null } | null };
+type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null; receivedAt?: string } | null };
 type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline";
 
 function versionState(version: ProgramVersion): VersionState {
@@ -61,7 +61,10 @@ function versionState(version: ProgramVersion): VersionState {
   const expected = version.expected?.commit;
   if (!expected) return "unknown";
   const [short, long] = running.length <= expected.length ? [running, expected] : [expected, running];
-  return long.startsWith(short) ? "current" : "pending";
+  if (long.startsWith(short)) return "current";
+  const builtAt = Date.parse(version.running.builtAt ?? "");
+  const expectedAt = Date.parse(version.expected?.builtAt ?? version.expected?.receivedAt ?? "");
+  return Number.isFinite(builtAt) && Number.isFinite(expectedAt) && builtAt >= expectedAt ? "current" : "pending";
 }
 
 const VERSION_TONE: Record<VersionState, { chip: string; dot: string }> = {
