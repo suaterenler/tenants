@@ -14,7 +14,16 @@ export type TenantRecord = {
   createdAt: string;
 };
 export type Program = { key: string; name: string; publicPath: string; publicUrl: string | null; agentUrl: string; rootUrl: string; hostOnly: boolean };
-export type ProgramInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
+export type ProgramInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; rootPort: number | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
+
+function portOf(url: string): number | null {
+  try {
+    const port = Number(new URL(url).port);
+    return Number.isInteger(port) && port > 0 ? port : null;
+  } catch {
+    return null;
+  }
+}
 export type ProgramTenant = TenantRecord & { app: string };
 
 export function programList(): Program[] {
@@ -95,9 +104,9 @@ export async function overview(): Promise<{ apps: ProgramInfo[]; tenants: Progra
     programList().map(async (app) => {
       try {
         const [records, modules] = await Promise.all([agentCall<TenantRecord[]>(app, "/tenants"), agentCall<ProgramModule[]>(app, "/modules")]);
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, hostOnly: app.hostOnly, online: true, modules }, tenants: records.map((record) => ({ ...record, domains: record.domains ?? [], app: app.key })) };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, rootPort: portOf(app.rootUrl), hostOnly: app.hostOnly, online: true, modules }, tenants: records.map((record) => ({ ...record, domains: record.domains ?? [], app: app.key })) };
       } catch {
-        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, hostOnly: app.hostOnly, online: false, modules: [] }, tenants: [] };
+        return { info: { key: app.key, name: app.name, publicPath: app.publicPath, publicUrl: app.publicUrl, rootPort: portOf(app.rootUrl), hostOnly: app.hostOnly, online: false, modules: [] }, tenants: [] };
       }
     }),
   );

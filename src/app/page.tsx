@@ -34,7 +34,7 @@ const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCo
 type ProgramModule = { key: string; label: string };
 type TenantSort = "name" | "app" | "expiresAt" | "status";
 type SortDir = "asc" | "desc";
-type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
+type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; rootPort: number | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
 type Tenant = {
   app: string;
   slug: string;
@@ -131,8 +131,9 @@ async function adminUpload(path: string, file: File): Promise<void> {
 }
 
 function tenantAddress(apps: AppInfo[], app: string, slug: string, domains: string[] = []): string {
-  if (domains[0]) return `https://${domains[0]}`;
   const info = apps.find((item) => item.key === app);
+  if (domains[0]?.endsWith(".localhost")) return `http://${domains[0]}${info?.rootPort ? `:${info.rootPort}` : ""}`;
+  if (domains[0]) return `https://${domains[0]}`;
   if (info?.hostOnly) return "";
   if (info?.publicUrl) return `${info.publicUrl.replace(/\/+$/, "")}/${slug}`;
   const origin = typeof window === "undefined" ? "" : window.location.origin;
