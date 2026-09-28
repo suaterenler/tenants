@@ -50,6 +50,34 @@ type Tenant = {
 };
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
+type BuildInfo = { commit: string | null; builtAt: string | null };
+type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null } | null };
+type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline";
+
+function versionState(version: ProgramVersion): VersionState {
+  if (!version.running) return "offline";
+  const running = version.running.commit;
+  if (!running) return "noInfo";
+  const expected = version.expected?.commit;
+  if (!expected) return "unknown";
+  const [short, long] = running.length <= expected.length ? [running, expected] : [expected, running];
+  return long.startsWith(short) ? "current" : "pending";
+}
+
+const VERSION_TONE: Record<VersionState, { chip: string; dot: string }> = {
+  current: { chip: "border-emerald-500/40 bg-emerald-500/10", dot: "bg-emerald-500" },
+  pending: { chip: "border-amber-500/50 bg-amber-500/10", dot: "bg-amber-500 animate-pulse" },
+  unknown: { chip: "border-border bg-muted/40", dot: "bg-sky-500" },
+  noInfo: { chip: "border-border bg-muted/40", dot: "bg-muted-foreground/40" },
+  offline: { chip: "border-destructive/40 bg-destructive/5", dot: "bg-destructive" },
+};
+
+function shortDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleString(undefined, { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 type Overview = { apps: AppInfo[]; rows: Tenant[]; total: number; page: number; pageCount: number; pageSize: number; today: string };
 type Secret = { title: string; tenant: Tenant; password: string };
 type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[]; domains: string };
@@ -351,6 +379,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const { messages: t, locale } = useI18n();
   const confirm = useConfirm();
   const [overview, setOverview] = useState<Overview>(EMPTY_OVERVIEW);
+  const [versions, setVersions] = useState<ProgramVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -424,6 +453,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadVersions = useCallback(() => adminFetch<ProgramVersion[]>("/versions").then(setVersions).catch(() => undefined), []);
+
+  useEffect(() => {
+    void loadVersions();
+  }, [loadVersions]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -690,6 +725,39 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </header>
       <main className="mx-auto flex max-w-6xl flex-col gap-4 p-4">
+        {versions.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {versions.map((version) => {
+              const state = versionState(version);
+              const tone = VERSION_TONE[state];
+              const label = t.tenants.versionState[state];
+              const hint =
+                state === "pending"
+                  ? t.tenants.versionPending.replace("{commit}", version.expected?.commit.slice(0, 7) ?? "")
+                  : state === "current"
+                    ? t.tenants.versionCurrent
+                    : state === "unknown"
+                      ? t.tenants.versionUnknown
+                      : state === "noInfo"
+                        ? t.tenants.versionNoInfo
+                        : t.tenants.notConnected;
+              return (
+                <div key={version.key} title={hint} className={cn("flex flex-col gap-1.5 rounded-lg border p-3", tone.chip)}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold">{version.name}</span>
+                    <span className={cn("size-2.5 shrink-0 rounded-full", tone.dot)} />
+                  </div>
+                  <div className="font-mono text-base leading-none">{version.running?.commit?.slice(0, 7) ?? "—"}</div>
+                  <div className="min-h-4 text-xs text-muted-foreground">{shortDate(version.running?.builtAt)}</div>
+                  <div className="truncate text-xs font-medium">
+                    {label}
+                    {state === "pending" ? <span className="font-mono"> → {version.expected?.commit.slice(0, 7)}</span> : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-56 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -707,7 +775,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             onClick={() => {
               setRefreshing(true);
               const minimum = new Promise((resolve) => window.setTimeout(resolve, 600));
-              void Promise.all([load(), minimum]).finally(() => setRefreshing(false));
+              void Promise.all([load(), loadVersions(), minimum]).finally(() => setRefreshing(false));
             }}
             disabled={refreshing}
             aria-label={t.tenants.refresh}

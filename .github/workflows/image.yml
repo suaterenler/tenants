@@ -15,6 +15,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Version
+        id: ver
+        run: |
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - uses: docker/setup-buildx-action@v3
 
       - uses: docker/login-action@v3
@@ -27,8 +33,22 @@ jobs:
         with:
           context: .
           push: true
+          build-args: |
+            APP_COMMIT=${{ steps.ver.outputs.commit }}
+            APP_BUILD_DATE=${{ steps.ver.outputs.date }}
           tags: |
             ghcr.io/${{ github.repository }}:latest
             ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Notify admin
+        env:
+          RELEASE_SECRET: ${{ secrets.RELEASE_SECRET }}
+        run: |
+          [ -n "$RELEASE_SECRET" ] || { echo "RELEASE_SECRET tanimli degil, bildirim atlandi"; exit 0; }
+          for app in tenants; do
+            curl -fsS -m 20 -X POST "https://app.erenleryazilim.com/admin/api/releases" \
+              -H "Authorization: Bearer $RELEASE_SECRET" -H "Content-Type: application/json" \
+              -d "{\"app\":\"$app\",\"commit\":\"${{ steps.ver.outputs.commit }}\",\"builtAt\":\"${{ steps.ver.outputs.date }}\"}" || echo "admin bildirimi yapilamadi: $app"
+          done

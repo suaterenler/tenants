@@ -18,5 +18,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/edge ./edge
 EXPOSE 3050
 RUN mkdir -p /app/data && chown node:node /app/data
+ARG APP_COMMIT=""
+ARG APP_BUILD_DATE=""
+ENV APP_COMMIT=$APP_COMMIT APP_BUILD_DATE=$APP_BUILD_DATE
 USER node
 CMD ["node", "server.js"]
