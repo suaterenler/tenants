@@ -1,8 +1,21 @@
 "use client"
 
 import { useTheme } from "next-themes"
-import { Toaster as Sonner, type ToasterProps } from "sonner"
+import { Toaster as Sonner, toast, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
+
+const toastFlags = globalThis as { __toastPatched?: boolean }
+
+if (!toastFlags.__toastPatched) {
+  toastFlags.__toastPatched = true
+  const showError = toast.error
+  const showSuccess = toast.success
+  toast.error = ((message, data) => showError(message, { id: typeof message === "string" ? `error:${message}` : undefined, ...data })) as typeof toast.error
+  toast.success = ((message, data) => {
+    for (const item of toast.getToasts()) if ("type" in item && item.type === "error") toast.dismiss(item.id)
+    return showSuccess(message, data)
+  }) as typeof toast.success
+}
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()

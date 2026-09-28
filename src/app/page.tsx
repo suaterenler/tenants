@@ -258,6 +258,7 @@ function AdminLogin({ onSignedIn }: { onSignedIn: () => void }) {
     setSubmitting(true);
     try {
       const result = await adminFetch<{ token: string }>("/login", { method: "POST", body: { password } });
+      toast.dismiss();
       storeToken(result.token);
       onSignedIn();
     } catch (error) {
