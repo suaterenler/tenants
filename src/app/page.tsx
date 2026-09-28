@@ -12,6 +12,7 @@ import { Field } from "@/components/panel/field";
 import { PasswordInput } from "@/components/panel/password-input";
 import { OptionSelect } from "@/components/panel/option-select";
 import { PhoneInput } from "@/components/panel/phone-input";
+import { RelativeTimeChip } from "@/components/panel/relative-time-chip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -752,7 +753,10 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                     <span className={cn("size-2.5 shrink-0 rounded-full", tone.dot)} />
                   </div>
                   <div className="font-mono text-base leading-none">{version.running?.commit?.slice(0, 7) ?? "—"}</div>
-                  <div className="min-h-4 text-xs text-muted-foreground">{shortDate(version.running?.builtAt)}</div>
+                  <div className="flex min-h-4 flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                    {shortDate(version.running?.builtAt)}
+                    <RelativeTimeChip value={version.running?.builtAt} />
+                  </div>
                   <div className="truncate text-xs font-medium">
                     {label}
                     {state === "pending" ? <span className="font-mono"> → {version.expected?.commit.slice(0, 7)}</span> : null}
@@ -856,6 +860,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                               <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.tenants.expiredHint : undefined}>
                                 {formatDate(tenant.expiresAt, locale)}
                               </span>
+                              <RelativeTimeChip value={tenant.expiresAt} />
                               {expired ? (
                                 <Badge variant="destructive">{t.tenants.expired}</Badge>
                               ) : daysLeft !== null ? (
@@ -908,9 +913,14 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           </CardContent>
         </Card>
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>
+          <span className="inline-flex flex-wrap items-center gap-1">
             {t.tenants.total.replace("{count}", String(overview.total))}
-            {usage ? ` · ${t.tenants.totalSize.replace("{size}", formatBytes(usageTotal, locale))} · ${t.tenants.calculatedAt.replace("{time}", formatDateTime(usage.calculatedAt, locale))}` : ""}
+            {usage ? (
+              <>
+                {` · ${t.tenants.totalSize.replace("{size}", formatBytes(usageTotal, locale))} · ${t.tenants.calculatedAt.replace("{time}", formatDateTime(usage.calculatedAt, locale))}`}
+                <RelativeTimeChip value={usage.calculatedAt} />
+              </>
+            ) : null}
           </span>
           <div className={overview.total > PAGE_SIZES[0] ? "flex items-center gap-2" : "hidden"}>
             <span>{t.tenants.pageSize}</span>
