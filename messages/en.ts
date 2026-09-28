@@ -111,6 +111,7 @@ export const en: Messages = {
     surveyMinOptions: "Enter at least 2 options.",
     unauthorized: "Session not found or expired.",
     programUnavailable: "The program is unavailable or not connected.",
+    releaseNotConfigured: "Release key (RELEASE_SECRET) is not set on the server.",
     unknownProgram: "Unknown program.",
     tenantSuspended: "Your account has been suspended. Please contact your service provider.",
     tenantInvalidEmail: "Enter a valid email address.",

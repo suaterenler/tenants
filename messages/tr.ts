@@ -109,6 +109,7 @@ export const tr = {
     surveyMinOptions: "En az 2 seçenek girilmelidir.",
     unauthorized: "Oturum bulunamadı veya süresi doldu.",
     programUnavailable: "Program şu an erişilemiyor veya bağlı değil.",
+    releaseNotConfigured: "Sürüm anahtarı (RELEASE_SECRET) sunucuda tanımlı değil.",
     unknownProgram: "Bilinmeyen program.",
     tenantSuspended: "Hesabınız askıya alınmıştır. Lütfen hizmet sağlayıcınız ile iletişim kurunuz.",
     tenantInvalidEmail: "Geçerli bir e-posta adresi girin.",

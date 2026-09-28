@@ -8,7 +8,7 @@ function digest(value: string): Buffer {
 
 export async function POST(request: Request) {
   const secret = process.env.RELEASE_SECRET?.trim() ?? "";
-  if (secret.length < 32) return fail("programUnavailable", 503);
+  if (secret.length < 32) return fail("releaseNotConfigured", 503);
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !timingSafeEqual(digest(token), digest(secret))) return fail("unauthorized", 401);

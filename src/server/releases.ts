@@ -1,5 +1,6 @@
 import "server-only";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { AgentError, agentCall, programList } from "./apps";
 
@@ -52,16 +53,30 @@ export function sameCommit(a: string | null | undefined, b: string | null | unde
   return long.toLowerCase().startsWith(short.toLowerCase());
 }
 
+const DEV = process.env.NODE_ENV === "development";
+
+function localCommit(): string | null {
+  if (!DEV) return null;
+  try {
+    return execFileSync("git", ["rev-parse", "--short", "HEAD"], { encoding: "utf8" }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function localExpected(running: BuildInfo | null, release: Release | undefined): Release | null {
+  if (release) return release;
+  return DEV && running?.commit ? { commit: running.commit, builtAt: running.builtAt, receivedAt: new Date().toISOString() } : null;
+}
+
 export async function programVersions(): Promise<ProgramVersion[]> {
   const releases = await readReleases();
-  const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || null, builtAt: process.env.APP_BUILD_DATE?.trim() || null };
+  const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || localCommit(), builtAt: process.env.APP_BUILD_DATE?.trim() || null };
   const programs = await Promise.all(
-    programList().map(async (app) => ({
-      key: app.key,
-      name: app.name,
-      running: await agentCall<BuildInfo>(app, "/version", { timeoutMs: 5000 }).catch((error: unknown) => (error instanceof AgentError && (error.status === 404 || error.message.startsWith("HTTP ")) ? NO_INFO : null)),
-      expected: releases[app.key] ?? null,
-    })),
+    programList().map(async (app) => {
+      const running = await agentCall<BuildInfo>(app, "/version", { timeoutMs: 5000 }).catch((error: unknown) => (error instanceof AgentError && (error.status === 404 || error.message.startsWith("HTTP ")) ? NO_INFO : null));
+      return { key: app.key, name: app.name, running, expected: localExpected(running, releases[app.key]) };
+    }),
   );
-  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: releases.tenants ?? null }];
+  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: localExpected(own, releases.tenants) }];
 }
