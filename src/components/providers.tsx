@@ -12,7 +12,7 @@ export function Providers({ locale, theme, children }: { locale: Locale; theme: 
     <ThemeProvider attribute="class" defaultTheme={theme ?? "system"} enableSystem storageKey={THEME_COOKIE} disableTransitionOnChange>
       <I18nProvider initialLocale={locale}>
         {children}
-        <Toaster richColors position="top-right" />
+        <Toaster richColors expand visibleToasts={5} position="top-right" />
       </I18nProvider>
     </ThemeProvider>
   );

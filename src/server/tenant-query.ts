@@ -3,7 +3,7 @@ import type { ProgramTenant } from "./apps";
 export type TenantStatusFilter = "" | "active" | "passive" | "expired";
 export type TenantSort = "name" | "app" | "expiresAt" | "status";
 export type TenantSortDir = "asc" | "desc";
-export type TenantQuery = { search: string; app: string; status: TenantStatusFilter; sort: TenantSort; dir: TenantSortDir; page: number; pageSize: number };
+export type TenantQuery = { search: string; contact: string; expiresFrom: string; expiresTo: string; app: string; status: TenantStatusFilter; sort: TenantSort; dir: TenantSortDir; page: number; pageSize: number };
 
 export const PAGE_SIZES = [25, 50, 100] as const;
 const STATUSES = new Set<string>(["active", "passive", "expired"]);
@@ -11,6 +11,13 @@ const SORTS = new Set<string>(["name", "app", "expiresAt", "status"]);
 
 export function todayIn(timeZone = "Europe/Istanbul", now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isoDate(value: string | null): string {
+  const text = (value ?? "").trim();
+  return ISO_DATE.test(text) && !Number.isNaN(Date.parse(text)) ? text : "";
 }
 
 function positiveInt(value: string | null, fallback: number): number {
@@ -24,6 +31,9 @@ export function parseTenantQuery(params: URLSearchParams): TenantQuery {
   const pageSize = positiveInt(params.get("pageSize"), PAGE_SIZES[0]);
   return {
     search: (params.get("search") ?? "").trim().slice(0, 100),
+    contact: (params.get("contact") ?? "").trim().slice(0, 100),
+    expiresFrom: isoDate(params.get("expiresFrom")),
+    expiresTo: isoDate(params.get("expiresTo")),
     app: (params.get("app") ?? "").trim(),
     status: (STATUSES.has(status) ? status : "") as TenantStatusFilter,
     sort: (SORTS.has(sort) ? sort : "name") as TenantSort,
@@ -52,6 +62,7 @@ export function compareTenants(sort: TenantSort, dir: TenantSortDir): (a: Progra
 
 export function filterTenants(tenants: ProgramTenant[], query: Omit<TenantQuery, "page" | "pageSize">, today: string): ProgramTenant[] {
   const needle = query.search.toLocaleLowerCase("tr");
+  const contactNeedle = query.contact.toLocaleLowerCase("tr");
   return tenants
     .filter((tenant) => !query.app || tenant.app === query.app)
     .filter((tenant) => {
@@ -60,7 +71,13 @@ export function filterTenants(tenants: ProgramTenant[], query: Omit<TenantQuery,
       if (query.status === "expired") return isExpired(tenant, today);
       return true;
     })
-    .filter((tenant) => !needle || [tenant.name, tenant.slug, tenant.contactName, tenant.phone, tenant.email].some((value) => value.toLocaleLowerCase("tr").includes(needle)))
+    .filter((tenant) => !needle || [tenant.name, tenant.slug, ...tenant.domains].some((value) => value.toLocaleLowerCase("tr").includes(needle)))
+    .filter((tenant) => {
+      if (!query.expiresFrom && !query.expiresTo) return true;
+      if (!tenant.expiresAt) return false;
+      return (!query.expiresFrom || tenant.expiresAt >= query.expiresFrom) && (!query.expiresTo || tenant.expiresAt <= query.expiresTo);
+    })
+    .filter((tenant) => !contactNeedle || [tenant.contactName, tenant.phone, tenant.email].some((value) => value.toLocaleLowerCase("tr").includes(contactNeedle)))
     .sort(compareTenants(query.sort, query.dir));
 }
 

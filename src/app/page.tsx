@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogOut, Mail, Pencil, Plus, RefreshCw, Search, Trash2, Upload } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogIn, Pencil, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { MadeBy } from "@/components/made-by";
+import { AdminHeader } from "@/components/panel/admin-header";
 import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { DatePicker } from "@/components/panel/date-picker";
 import { Field } from "@/components/panel/field";
 import { PasswordInput } from "@/components/panel/password-input";
+import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/header-filters";
 import { OptionSelect } from "@/components/panel/option-select";
 import { PhoneInput } from "@/components/panel/phone-input";
 import { RelativeTimeChip } from "@/components/panel/relative-time-chip";
@@ -19,36 +21,23 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { CreateTenantDialog, CredentialsDialog, domainUrl, EMPTY_FORM, panelUrl, tenantAddress, type AppInfo, type Secret, type Tenant, type TenantForm } from "@/components/panel/tenant-create";
+import { adminFetch, AdminRequestError, authHeaders, BASE_PATH, readToken, storeToken, type ApiBody } from "@/lib/admin-client";
+import { excelDate, writeExcel, type ExcelCell } from "@/lib/excel";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
-const BASE_PATH = "/admin";
-const TOKEN_KEY = "erenler_tenants_token";
 const PAGE_SIZES = [25, 50, 100];
 const EMPTY_OVERVIEW: Overview = { apps: [], rows: [], total: 0, page: 1, pageCount: 1, pageSize: 25, today: "" };
 
-type ProgramModule = { key: string; label: string };
 type TenantSort = "name" | "app" | "expiresAt" | "status";
 type SortDir = "asc" | "desc";
-type AppInfo = { key: string; name: string; publicPath: string; publicUrl: string | null; rootPort: number | null; hostOnly: boolean; online: boolean; modules: ProgramModule[] };
-type Tenant = {
-  app: string;
-  slug: string;
-  name: string;
-  active: boolean;
-  expiresAt: string | null;
-  contactName: string;
-  phone: string;
-  email: string;
-  disabledModules: string[];
-  domains: string[];
-  createdAt: string;
-};
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type BuildInfo = { commit: string | null; builtAt: string | null };
@@ -83,43 +72,6 @@ function shortDate(value: string | null | undefined): string {
 }
 
 type Overview = { apps: AppInfo[]; rows: Tenant[]; total: number; page: number; pageCount: number; pageSize: number; today: string };
-type Secret = { title: string; tenant: Tenant; password: string };
-type Form = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[]; domains: string };
-type ApiBody<T> = { ok: true; data: T } | { ok: false; error: string };
-
-const EMPTY_FORM: Form = { app: "", slug: "", name: "", active: true, contactName: "", phone: "", email: "", expiresAt: "", disabledModules: [], domains: "" };
-
-function readToken(): string | null {
-  try {
-    return window.sessionStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function storeToken(token: string | null): void {
-  try {
-    if (token) window.sessionStorage.setItem(TOKEN_KEY, token);
-    else window.sessionStorage.removeItem(TOKEN_KEY);
-  } catch {
-    return;
-  }
-}
-
-class AdminRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.status = status;
-  }
-}
-
-function authHeaders(): Record<string, string> {
-  const token = readToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 async function adminDownload(path: string, fallbackName: string): Promise<void> {
   const response = await fetch(`${BASE_PATH}/api${path}`, { headers: authHeaders(), cache: "no-store" });
   if (!response.ok) {
@@ -135,21 +87,6 @@ async function adminDownload(path: string, fallbackName: string): Promise<void> 
   URL.revokeObjectURL(url);
 }
 
-async function adminFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
-  const headers = authHeaders();
-  if (init.body !== undefined) headers["Content-Type"] = "application/json";
-  const response = await fetch(`${BASE_PATH}/api${path}`, {
-    method: init.method ?? "GET",
-    headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-    cache: "no-store",
-  });
-  const payload = (await response.json().catch(() => null)) as ApiBody<T> | null;
-  if (!payload) throw new AdminRequestError(`HTTP ${response.status}`, response.status);
-  if (!payload.ok) throw new AdminRequestError(payload.error, response.status);
-  return payload.data;
-}
-
 async function adminUpload(path: string, file: File): Promise<void> {
   const response = await fetch(`${BASE_PATH}/api${path}`, {
     method: "POST",
@@ -162,19 +99,11 @@ async function adminUpload(path: string, file: File): Promise<void> {
   if (!payload.ok) throw new AdminRequestError(payload.error, response.status);
 }
 
-function tenantAddress(apps: AppInfo[], app: string, slug: string, domains: string[] = []): string {
-  const info = apps.find((item) => item.key === app);
-  if (domains[0]?.endsWith(".localhost")) return `http://${domains[0]}${info?.rootPort ? `:${info.rootPort}` : ""}`;
-  if (domains[0]) return `https://${domains[0]}`;
-  if (info?.hostOnly) return "";
-  if (info?.publicUrl) return `${info.publicUrl.replace(/\/+$/, "")}/${slug}`;
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
-  return `${origin}${info?.publicPath ?? `/${app}`}/${slug}`;
-}
-
 function isExpired(tenant: Tenant, today: string): boolean {
   return tenant.expiresAt !== null && tenant.expiresAt <= today;
 }
+
+type TenantExportRow = { program: string; name: string; slug: string; contactName: string; phone: string; email: string; expiresAt: string | null; expired: boolean; active: boolean; createdAt: string | null; address: string };
 
 function noopSubscribe(): () => void {
   return () => undefined;
@@ -385,11 +314,16 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const confirm = useConfirm();
   const [overview, setOverview] = useState<Overview>(EMPTY_OVERVIEW);
   const [versions, setVersions] = useState<ProgramVersion[]>([]);
+  const [versionsLoaded, setVersionsLoaded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [contact, setContact] = useState("");
+  const [debouncedContact, setDebouncedContact] = useState("");
+  const [expires, setExpires] = useState({ from: "", to: "" });
+  const [debouncedExpires, setDebouncedExpires] = useState({ from: "", to: "" });
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0]);
   const [appFilter, setAppFilter] = useState("");
@@ -398,9 +332,10 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [editing, setEditing] = useState<Tenant | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<Form>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState<TenantForm>(EMPTY_FORM);
+  const [createOpen, setCreateOpen] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
+  const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("general");
   const [usage, setUsage] = useState<UsageResult | null>(null);
   const [deleting, setDeleting] = useState<Tenant | null>(null);
@@ -409,8 +344,6 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [downloading, setDownloading] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
   const restoreInputRef = useRef<HTMLInputElement>(null);
-  const [mailTo, setMailTo] = useState("");
-  const [mailing, setMailing] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const today = overview.today;
 
@@ -429,6 +362,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     (paged: boolean) => {
       const params = new URLSearchParams();
       if (debouncedSearch) params.set("search", debouncedSearch);
+      if (debouncedContact) params.set("contact", debouncedContact);
+      if (debouncedExpires.from) params.set("expiresFrom", debouncedExpires.from);
+      if (debouncedExpires.to) params.set("expiresTo", debouncedExpires.to);
       if (appFilter) params.set("app", appFilter);
       if (statusFilter) params.set("status", statusFilter);
       params.set("sort", sort);
@@ -440,7 +376,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       const value = params.toString();
       return value ? `?${value}` : "";
     },
-    [debouncedSearch, appFilter, statusFilter, sort, sortDir, page, pageSize],
+    [debouncedSearch, debouncedContact, debouncedExpires, appFilter, statusFilter, sort, sortDir, page, pageSize],
   );
 
   const load = useCallback(
@@ -459,7 +395,14 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     void load();
   }, [load]);
 
-  const loadVersions = useCallback(() => adminFetch<ProgramVersion[]>("/versions").then(setVersions).catch(() => undefined), []);
+  const loadVersions = useCallback(
+    () =>
+      adminFetch<ProgramVersion[]>("/versions")
+        .then(setVersions)
+        .catch(() => undefined)
+        .finally(() => setVersionsLoaded(true)),
+    [],
+  );
 
   useEffect(() => {
     void loadVersions();
@@ -468,10 +411,12 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
+      setDebouncedContact(contact.trim());
+      setDebouncedExpires(expires);
       setPage(1);
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [search]);
+  }, [search, contact, expires]);
 
   async function confirmBackup(tenant: Tenant, kind: "database" | "files") {
     const message = (kind === "database" ? t.tenants.backupDatabaseConfirm : t.tenants.backupFilesConfirm).replace("{name}", tenant.name);
@@ -546,7 +491,14 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   async function exportExcel() {
     setExporting(true);
     try {
-      await adminDownload(`/tenants/export${queryString(false)}`, "kurumlar.xlsx");
+      const data = await adminFetch<{ rows: TenantExportRow[]; today: string }>(`/tenants/export${queryString(false)}`);
+      const text = (value: string | null): ExcelCell => (value ? (excelDate(value) ?? value) : "");
+      await writeExcel({
+        fileName: `hesaplar-${data.today}.xlsx`,
+        sheetName: t.tenants.title,
+        header: [t.tenants.program, t.tenants.name, t.tenants.slug, t.tenants.contactName, t.tenants.phone, t.tenants.email, t.tenants.expiresAt, t.tenants.status, t.tenants.createdAt, t.tenants.address],
+        rows: data.rows.map((row) => [row.program, row.name, row.slug, row.contactName, row.phone, row.email, text(row.expiresAt), row.expired ? t.tenants.expired : row.active ? t.tenants.active : t.tenants.passive, text(row.createdAt), row.address]),
+      });
     } catch (error) {
       handleError(error);
     } finally {
@@ -582,10 +534,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const formApp = overview.apps.find((app) => app.key === form.app);
 
   function openCreate() {
-    setEditing(null);
-    setTab("general");
-    setForm(EMPTY_FORM);
-    setDialogOpen(true);
+    setCreateOpen(true);
   }
 
   function openEdit(tenant: Tenant) {
@@ -606,7 +555,11 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     setDialogOpen(true);
   }
 
-  function patch(changes: Partial<Form>) {
+  const formDomains = form.domains.split(/[\s,]+/).filter(Boolean);
+  const standardAddress = form.slug ? tenantAddress(overview.apps, form.app, form.slug) : "";
+  const addressLinks = [...new Set([standardAddress, ...formDomains.map((domain) => domainUrl(overview.apps, form.app, domain))].filter(Boolean))];
+
+  function patch(changes: Partial<TenantForm>) {
     setForm((current) => ({ ...current, ...changes }));
   }
 
@@ -634,10 +587,6 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         await adminFetch<Tenant>(`/tenants/${editing.app}/${editing.slug}`, { method: "PATCH", body: { ...payload, active: form.active } });
         toast.success(t.tenants.saved);
         setDialogOpen(false);
-      } else {
-        const result = await adminFetch<{ tenant: Tenant; adminPassword: string }>("/tenants", { method: "POST", body: { ...payload, app: form.app, slug: form.slug, active: form.active } });
-        setDialogOpen(false);
-        showSecret({ title: t.tenants.created, tenant: result.tenant, password: result.adminPassword });
       }
       await load();
     } catch (error) {
@@ -665,36 +614,10 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     try {
       const result = await adminFetch<{ password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: {} });
       setDialogOpen(false);
-      showSecret({ title: t.tenants.passwordReset, tenant, password: result.password });
+      setSecret({ title: t.tenants.passwordReset, tenant, password: result.password });
     } catch (error) {
       handleError(error);
     }
-  }
-
-  function showSecret(value: Secret) {
-    setMailTo(value.tenant.email ?? "");
-    setSecret(value);
-  }
-
-  async function mailCredentials() {
-    if (!secret || !mailTo.trim()) return;
-    setMailing(true);
-    try {
-      const result = await adminFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password } });
-      toast.success(t.tenants.credentialsSent.replace("{email}", result.sentTo));
-    } catch (error) {
-      handleError(error);
-    } finally {
-      setMailing(false);
-    }
-  }
-
-  function secretRows(value: Secret): { label: string; value: string; link: boolean }[] {
-    return [
-      { label: t.tenants.address, value: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains) || t.tenants.noAddress, link: tenantAddress(overview.apps, value.tenant.app, value.tenant.slug, value.tenant.domains) !== "" },
-      { label: t.tenants.adminUser, value: "admin", link: false },
-      { label: t.tenants.adminPassword, value: value.password, link: false },
-    ];
   }
 
   async function copy(value: string) {
@@ -706,9 +629,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     }
   }
 
-  const appOptions = [{ value: "", label: t.tenants.allPrograms }, ...overview.apps.map((app) => ({ value: app.key, label: app.online ? app.name : `${app.name} (${t.tenants.notConnected})` }))];
+  const appOptions = [...overview.apps.map((app) => ({ value: app.key, label: app.online ? app.name : `${app.name} (${t.tenants.notConnected})` }))];
   const statusOptions = [
-    { value: "", label: t.tenants.allStatuses },
     { value: "active", label: t.tenants.active },
     { value: "passive", label: t.tenants.passive },
     { value: "expired", label: t.tenants.expired },
@@ -716,21 +638,23 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-2 font-semibold">
-          <Building2 className="size-5" />
-          {t.tenants.title}
-        </div>
-        <div className="flex items-center gap-1">
-          <Toolbar />
-          <Button variant="ghost" size="sm" onClick={onSignOut}>
-            <LogOut className="size-4" />
-            {t.tenants.logout}
-          </Button>
-        </div>
-      </header>
-      <main className="mx-auto flex max-w-6xl flex-col gap-4 p-4">
-        {versions.length > 0 ? (
+      <AdminHeader active="tenants" onSignOut={onSignOut} />
+      <main className="mx-auto flex max-w-[100rem] flex-col gap-4 p-4">
+        {!versionsLoaded ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-hidden>
+            {Array.from({ length: Math.max(overview.apps.length, 4) }, (_, index) => (
+              <div key={index} className="flex min-h-[115px] flex-col gap-1.5 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Skeleton className="h-5 w-20" />
+                  <Skeleton className="size-2.5 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-4 w-24" />
+              </div>
+            ))}
+          </div>
+        ) : versions.length > 0 ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {versions.map((version) => {
               const state = versionState(version);
@@ -767,19 +691,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           </div>
         ) : null}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-56 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input className="pl-8" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.tenants.searchPlaceholder} aria-label={t.common.search} />
-          </div>
-          <div className="w-48">
-            <OptionSelect value={appFilter} onChange={(value) => { setAppFilter(value); setPage(1); }} options={appOptions} ariaLabel={t.tenants.program} />
-          </div>
-          <div className="w-44">
-            <OptionSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} ariaLabel={t.tenants.status} />
-          </div>
+          <h2 className="mr-auto text-xl font-semibold">{t.tenants.title}</h2>
           <Button
             variant="outline"
-            size="icon"
             onClick={() => {
               setRefreshing(true);
               const minimum = new Promise((resolve) => window.setTimeout(resolve, 600));
@@ -790,6 +704,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             title={t.tenants.refresh}
           >
             <RefreshCw className={cn("size-4", refreshing && "animate-spin")} />
+            {t.tenants.refresh}
           </Button>
           <Button variant="outline" onClick={() => void calculateUsage()} disabled={calculating || overview.total === 0}>
             {calculating ? <Loader2 className="size-4 animate-spin" /> : <HardDrive className="size-4" />}
@@ -809,13 +724,32 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             <Table className={refreshing ? "opacity-60 transition-opacity" : "transition-opacity"}>
               <TableHeader>
                 <TableRow>
-                  {sortHead("app", t.tenants.program)}
-                  {sortHead("name", t.tenants.name)}
-                  <TableHead>{t.tenants.contact}</TableHead>
+                  {sortHead("app", t.tenants.program, "min-w-36")}
+                  {sortHead("name", t.tenants.name, "min-w-40")}
+                  <TableHead className="min-w-36">{t.tenants.contact}</TableHead>
                   {sortHead("expiresAt", t.tenants.expiresAt)}
                   {usage ? <TableHead className="text-right">{t.tenants.size}</TableHead> : null}
-                  {sortHead("status", t.tenants.status, "w-24")}
+                  {sortHead("status", t.tenants.status, "w-28 min-w-28 max-w-32 whitespace-nowrap")}
                   <TableHead className="w-48" />
+                </TableRow>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderSelect value={appFilter} onChange={(value) => { setAppFilter(value); setPage(1); }} options={appOptions} allLabel={t.common.all} label={t.tenants.program} />
+                  </TableHead>
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderText value={search} onChange={setSearch} label={t.tenants.name} />
+                  </TableHead>
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderText value={contact} onChange={setContact} label={t.tenants.contact} />
+                  </TableHead>
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderDateRange from={expires.from} to={expires.to} onChange={(from, to) => setExpires({ from, to })} future />
+                  </TableHead>
+                  {usage ? <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" /> : null}
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderSelect value={statusFilter} onChange={(value) => { setStatusFilter(value); setPage(1); }} options={statusOptions} allLabel={t.common.all} label={t.tenants.status} className="min-w-0" />
+                  </TableHead>
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -835,6 +769,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   rows.map((tenant) => {
                     const expired = isExpired(tenant, today);
                     const daysLeft = tenant.expiresAt ? Math.round((Date.parse(tenant.expiresAt) - Date.parse(today)) / 86_400_000) : null;
+                    const createdDay = tenant.createdAt ? tenant.createdAt.slice(0, 10) : "";
+                    const daysUsed = createdDay >= "2000-01-01" ? Math.max(0, Math.round((Date.parse(today) - Date.parse(createdDay)) / 86_400_000)) : null;
                     return (
                       <TableRow key={`${tenant.app}:${tenant.slug}`}>
                         <TableCell>
@@ -846,7 +782,18 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                           {tenant.domains?.length ? (
                             <div className="flex flex-wrap items-center gap-1 pt-0.5 text-xs text-muted-foreground">
                               <Globe className="size-3" />
-                              {tenant.domains.join(", ")}
+                              {tenant.domains.map((domain) => (
+                                <a
+                                  key={domain}
+                                  href={domainUrl(overview.apps, tenant.app, domain)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rounded bg-muted px-1.5 py-0.5 text-primary underline-offset-2 hover:underline"
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  {domain}
+                                </a>
+                              ))}
                             </div>
                           ) : null}
                         </TableCell>
@@ -856,18 +803,33 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell className="text-sm">
                           {tenant.expiresAt ? (
-                            <span className="flex flex-wrap items-center gap-1.5">
+                            <span className="flex flex-col items-start gap-1">
                               <span className={expired ? "font-medium text-destructive" : undefined} title={expired ? t.tenants.expiredHint : undefined}>
                                 {formatDate(tenant.expiresAt, locale)}
                               </span>
-                              <RelativeTimeChip value={tenant.expiresAt} />
-                              {expired ? (
-                                <Badge variant="destructive">{t.tenants.expired}</Badge>
-                              ) : daysLeft !== null ? (
-                                <Badge variant="outline" className={daysLeft <= 30 ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400" : "text-muted-foreground"}>
-                                  {t.tenants.daysLeft.replace("{days}", String(daysLeft))}
-                                </Badge>
-                              ) : null}
+                              <span className="flex flex-wrap items-center gap-1">
+                                {daysUsed !== null ? (
+                                  <Badge variant="outline" className="border-sky-500/50 bg-sky-500/10 text-sky-700 dark:text-sky-400">
+                                    {daysUsed === 0 ? t.tenants.openedToday : t.tenants.daysUsed.replace("{days}", String(daysUsed))}
+                                  </Badge>
+                                ) : null}
+                                {expired ? (
+                                  <Badge variant="destructive">{t.tenants.expired}</Badge>
+                                ) : daysLeft !== null ? (
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      daysLeft <= 7
+                                        ? "border-red-500/50 bg-red-500/10 text-red-700 dark:text-red-400"
+                                        : daysLeft <= 30
+                                          ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                          : "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                                    }
+                                  >
+                                    {daysLeft === 0 ? t.tenants.expiresToday : t.tenants.daysLeft.replace("{days}", String(daysLeft))}
+                                  </Badge>
+                                ) : null}
+                              </span>
                             </span>
                           ) : (
                             <span className="text-muted-foreground">{t.tenants.noExpiry}</span>
@@ -879,6 +841,11 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                         </TableCell>
                         <TableCell>
                           <div className="flex justify-end gap-1">
+                            {tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains) ? (
+                              <Button variant="ghost" size="icon-sm" aria-label={t.tenants.panelLogin} title={t.tenants.panelLogin} render={<a href={panelUrl(tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains))} target="_blank" rel="noreferrer" />}>
+                                <LogIn className="size-4 text-violet-600 dark:text-violet-400" />
+                              </Button>
+                            ) : null}
                             {tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains) ? (
                               <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={tenantAddress(overview.apps, tenant.app, tenant.slug, tenant.domains)} target="_blank" rel="noreferrer" />}>
                                 <ExternalLink className="size-4 text-emerald-600 dark:text-emerald-400" />
@@ -997,23 +964,34 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       <Switch checked={form.active} onCheckedChange={(active) => patch({ active })} disabled={saving} />
                     </label>
                   </Field>
-                  <div className="flex min-h-6 items-center gap-1 sm:col-span-2">
-                    {form.slug && !tenantAddress(overview.apps, form.app, form.slug, editing?.domains) ? (
+                  <div className="flex min-h-6 flex-wrap items-center gap-x-3 gap-y-1 sm:col-span-2">
+                    {form.slug && !tenantAddress(overview.apps, form.app, form.slug) && !formDomains.length ? (
                       <span className="text-xs text-muted-foreground">{t.tenants.noAddress}</span>
                     ) : form.slug ? (
-                      <>
-                        {editing ? (
-                          <a href={tenantAddress(overview.apps, form.app, form.slug, editing?.domains)} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
-                            <ExternalLink className="size-3 shrink-0" />
-                            {tenantAddress(overview.apps, form.app, form.slug, editing?.domains)}
-                          </a>
-                        ) : (
+                      editing ? (
+                        addressLinks.map((url) => (
+                          <span key={url} className="inline-flex min-w-0 items-center gap-1">
+                            <a href={url} target="_blank" rel="noreferrer" className="inline-flex min-w-0 items-center gap-1 break-all text-xs text-primary underline-offset-4 hover:underline">
+                              <ExternalLink className="size-3 shrink-0" />
+                              {url}
+                            </a>
+                            <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(url)}>
+                              <Copy className="size-3" />
+                            </Button>
+                            <a href={panelUrl(url)} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-1 rounded bg-violet-500/10 px-1.5 py-0.5 text-xs text-violet-700 underline-offset-4 hover:underline dark:text-violet-300">
+                              <LogIn className="size-3" />
+                              {t.tenants.panelLogin}
+                            </a>
+                          </span>
+                        ))
+                      ) : (
+                        <span className="inline-flex min-w-0 items-center gap-1">
                           <span className="break-all text-xs text-muted-foreground">{tenantAddress(overview.apps, form.app, form.slug)}</span>
-                        )}
-                        <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug, editing?.domains))}>
-                          <Copy className="size-3" />
-                        </Button>
-                      </>
+                          <Button type="button" variant="ghost" size="icon-xs" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(tenantAddress(overview.apps, form.app, form.slug))}>
+                            <Copy className="size-3" />
+                          </Button>
+                        </span>
+                      )
                     ) : null}
                   </div>
                   <div className="sm:col-span-2">
@@ -1105,12 +1083,6 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               ) : null}
             </Tabs>
 
-            {saving && !editing ? (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                {t.tenants.creating}
-              </p>
-            ) : null}
           </form>
           <DialogFooter className="sm:justify-between">
             {editing ? (
@@ -1133,9 +1105,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
                 {t.common.cancel}
               </Button>
-              <Button type="submit" form="tenant-form" disabled={saving || !form.app || !form.name.trim() || (!editing && !form.slug)}>
+              <Button type="submit" form="tenant-form" disabled={saving || !form.app || !form.name.trim()}>
                 {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-                {editing ? t.common.save : t.tenants.create}
+                {t.common.save}
               </Button>
             </div>
           </DialogFooter>
@@ -1172,60 +1144,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={secret !== null} onOpenChange={(open) => (open ? undefined : setSecret(null))}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{secret?.title}</DialogTitle>
-          </DialogHeader>
-          {secret ? (
-            <div className="flex flex-col gap-3 text-sm">
-              <p className="text-muted-foreground">{t.tenants.createdHint}</p>
-              {secretRows(secret).map((row) => (
-                <div key={row.label} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
-                  <div className="min-w-0">
-                    <div className="text-xs text-muted-foreground">{row.label}</div>
-                    <div className="break-all font-mono">{row.value}</div>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    {row.link ? (
-                      <Button variant="ghost" size="icon-sm" aria-label={t.tenants.open} title={t.tenants.open} render={<a href={row.value} target="_blank" rel="noreferrer" />}>
-                        <ExternalLink className="size-4" />
-                      </Button>
-                    ) : null}
-                    <Button variant="ghost" size="icon-sm" aria-label={t.tenants.copy} title={t.tenants.copy} onClick={() => void copy(row.value)}>
-                      <Copy className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <form
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void mailCredentials();
-                }}
-                className="flex flex-col gap-2 rounded-md border border-dashed p-3"
-              >
-                <Field label={t.tenants.sendTo} htmlFor="credentials-mail" hint={secret.tenant.email ? undefined : t.tenants.sendToHint}>
-                  <div className="flex gap-2">
-                    <Input id="credentials-mail" type="email" value={mailTo} onChange={(e) => setMailTo(e.target.value)} placeholder="ornek@kurum.com" disabled={mailing} />
-                    <Button type="submit" variant="outline" disabled={mailing || !mailTo.trim()}>
-                      {mailing ? <Loader2 className="size-4 animate-spin" /> : <Mail className="size-4" />}
-                      {t.tenants.sendMail}
-                    </Button>
-                  </div>
-                </Field>
-              </form>
-            </div>
-          ) : null}
-          <DialogFooter className="sm:justify-between">
-            <Button variant="outline" onClick={() => (secret ? void copy(secretRows(secret).map((row) => `${row.label}: ${row.value}`).join("\n")) : undefined)}>
-              <Copy className="size-4" />
-              {t.tenants.copyAll}
-            </Button>
-            <Button onClick={() => setSecret(null)}>{t.common.ok}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateTenantDialog open={createOpen} apps={overview.apps} onClose={() => setCreateOpen(false)} onCreated={() => { setUsage(null); void load(); }} onError={handleError} />
+      <CredentialsDialog secret={secret} apps={overview.apps} onClose={() => setSecret(null)} onError={handleError} />
     </div>
   );
 }

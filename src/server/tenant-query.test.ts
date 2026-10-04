@@ -15,13 +15,29 @@ const ALL = [
 ];
 
 function query(overrides: Partial<Omit<TenantQuery, "page" | "pageSize">> = {}): Omit<TenantQuery, "page" | "pageSize"> {
-  return { search: "", app: "", status: "", sort: "name", dir: "asc", ...overrides };
+  return { search: "", contact: "", expiresFrom: "", expiresTo: "", app: "", status: "", sort: "name", dir: "asc", ...overrides };
 }
 
 describe("parseTenantQuery", () => {
   it("applies safe defaults", () => {
-    expect(parseTenantQuery(new URLSearchParams("page=-2&pageSize=999&status=weird&sort=bogus&dir=side"))).toEqual({ search: "", app: "", status: "", sort: "name", dir: "asc", page: 1, pageSize: 25 });
-    expect(parseTenantQuery(new URLSearchParams("page=3&pageSize=50&status=expired&app=salon&search= x &sort=expiresAt&dir=desc"))).toEqual({ search: "x", app: "salon", status: "expired", sort: "expiresAt", dir: "desc", page: 3, pageSize: 50 });
+    expect(parseTenantQuery(new URLSearchParams("page=-2&pageSize=999&status=weird&sort=bogus&dir=side"))).toEqual({ search: "", contact: "", expiresFrom: "", expiresTo: "", app: "", status: "", sort: "name", dir: "asc", page: 1, pageSize: 25 });
+    expect(parseTenantQuery(new URLSearchParams("page=3&pageSize=50&status=expired&app=salon&search= x &contact= y &expiresFrom=2026-01-01&expiresTo=2026-12-31&sort=expiresAt&dir=desc"))).toEqual({ search: "x", contact: "y", expiresFrom: "2026-01-01", expiresTo: "2026-12-31", app: "salon", status: "expired", sort: "expiresAt", dir: "desc", page: 3, pageSize: 50 });
+  });
+});
+
+describe("expiry date range", () => {
+  const slugs = (overrides: Partial<Omit<TenantQuery, "page" | "pageSize">>) => filterTenants(ALL, query(overrides), TODAY).map((row) => row.slug);
+
+  it("ignores invalid dates", () => {
+    expect(parseTenantQuery(new URLSearchParams("expiresFrom=abc&expiresTo=2026-13-45")).expiresFrom).toBe("");
+    expect(parseTenantQuery(new URLSearchParams("expiresFrom=abc&expiresTo=2026-13-45")).expiresTo).toBe("");
+  });
+
+  it("applies start, end and both inclusively and drops unlimited accounts", () => {
+    expect(slugs({ expiresFrom: "2026-12-01" })).toEqual(["gul"]);
+    expect(slugs({ expiresTo: "2026-09-26" })).toEqual(["cag"]);
+    expect(slugs({ expiresFrom: "2026-09-26", expiresTo: "2026-12-01" })).toEqual(["cag", "gul"]);
+    expect(slugs({ expiresFrom: "2027-01-01", expiresTo: "2026-01-01" })).toEqual([]);
   });
 });
 
@@ -34,7 +50,7 @@ describe("filterTenants", () => {
 
   it("filters by program and Turkish-aware search", () => {
     expect(filterTenants(ALL, query({ app: "salon" }), TODAY).map((row) => row.slug)).toEqual(["gul"]);
-    expect(filterTenants(ALL, query({ search: "AYŞE" }), TODAY).map((row) => row.slug)).toEqual(["ata"]);
+    expect(filterTenants(ALL, query({ contact: "AYŞE" }), TODAY).map((row) => row.slug)).toEqual(["ata"]);
   });
 
   it("sorts by name descending", () => {

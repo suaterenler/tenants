@@ -26,6 +26,7 @@ export function OptionSelect({
   emptyLabel,
   ariaLabel,
   disabled,
+  compact,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -33,11 +34,12 @@ export function OptionSelect({
   emptyLabel?: string;
   ariaLabel: string;
   disabled?: boolean;
+  compact?: boolean;
 }) {
   const selected = options.find((option) => option.value === value);
   return (
     <Select value={value} onValueChange={(next) => onChange(String(next ?? ""))} disabled={disabled}>
-      <SelectTrigger className="w-full" aria-label={ariaLabel}>
+      <SelectTrigger size={compact ? "sm" : "default"} className={compact ? "h-8 w-full text-xs font-normal" : "w-full"} aria-label={ariaLabel}>
         <SelectValue>{selected ? <OptionLabel option={selected} /> : (emptyLabel ?? "")}</SelectValue>
       </SelectTrigger>
       <SelectContent>
