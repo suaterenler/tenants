@@ -46,7 +46,7 @@ jobs:
         env:
           RELEASE_SECRET: ${{ secrets.RELEASE_SECRET }}
         run: |
-          [ -n "$RELEASE_SECRET" ] || { echo "RELEASE_SECRET tanimli degil, bildirim atlandi"; exit 0; }
+          [ -n "$RELEASE_SECRET" ] || { echo "::warning::RELEASE_SECRET tanimli degil; admin paneline bildirim gonderilemedi (panel bu derlemeyi gormez)"; exit 0; }
           for app in tenants; do
             curl -fsS -m 20 -X POST "https://app.erenleryazilim.com/admin/api/releases" \
               -H "Authorization: Bearer $RELEASE_SECRET" -H "Content-Type: application/json" \
@@ -58,7 +58,7 @@ jobs:
         env:
           RELEASE_SECRET: ${{ secrets.RELEASE_SECRET }}
         run: |
-          [ -n "$RELEASE_SECRET" ] || { echo "RELEASE_SECRET tanimli degil, bildirim atlandi"; exit 0; }
+          [ -n "$RELEASE_SECRET" ] || { echo "::warning::RELEASE_SECRET tanimli degil; admin paneline bildirim gonderilemedi (panel bu derlemeyi gormez)"; exit 0; }
           for app in tenants; do
             curl -fsS -m 20 -X POST "https://app.erenleryazilim.com/admin/api/releases"               -H "Authorization: Bearer $RELEASE_SECRET" -H "Content-Type: application/json"               -d "{\"app\":\"$app\",\"status\":\"failed\",\"commit\":\"${{ github.sha }}\",\"runUrl\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" || echo "admin bildirimi yapilamadi: $app"
           done

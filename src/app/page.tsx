@@ -644,7 +644,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       <main className="mx-auto flex max-w-[100rem] flex-col gap-4 p-4">
         {!versionsLoaded ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-hidden>
-            {Array.from({ length: Math.max(overview.apps.length, 4) }, (_, index) => (
+            {Array.from({ length: Math.max(overview.apps.length + 1, 5) }, (_, index) => (
               <div key={index} className="flex min-h-[115px] flex-col gap-1.5 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <Skeleton className="h-5 w-20" />

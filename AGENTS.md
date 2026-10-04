@@ -22,6 +22,7 @@ Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten u
 ## Ev Kuralları
 - Kodda yorum yok; `any` yok. UI metinleri `messages/tr.ts` + `messages/en.ts` birlikte
 - Her değişiklikten sonra `npx tsc --noEmit` + `npm run lint` + `npm run test`
+- Push'tan önce `npm run verify:build` çalıştırılır: commit edilmiş sürümü temiz kopyada GitHub'daki Docker derlemesi gibi derler (tsc/test yakalamayan istemci paketi hatalarını da). Kırılırsa push edilmez. Başarısız GitHub derlemesi Kurum Yönetimi ana sayfasında kırmızı kart olarak görünür.
 - Commit/push yalnızca kullanıcı onayıyla; mesajlar kısa ve İngilizce
 
 ## Yayın
