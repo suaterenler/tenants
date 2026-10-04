@@ -52,3 +52,13 @@ jobs:
               -H "Authorization: Bearer $RELEASE_SECRET" -H "Content-Type: application/json" \
               -d "{\"app\":\"$app\",\"commit\":\"${{ steps.ver.outputs.commit }}\",\"builtAt\":\"${{ steps.ver.outputs.date }}\"}" || echo "admin bildirimi yapilamadi: $app"
           done
+
+      - name: Notify admin of failure
+        if: failure()
+        env:
+          RELEASE_SECRET: ${{ secrets.RELEASE_SECRET }}
+        run: |
+          [ -n "$RELEASE_SECRET" ] || { echo "RELEASE_SECRET tanimli degil, bildirim atlandi"; exit 0; }
+          for app in tenants; do
+            curl -fsS -m 20 -X POST "https://app.erenleryazilim.com/admin/api/releases"               -H "Authorization: Bearer $RELEASE_SECRET" -H "Content-Type: application/json"               -d "{\"app\":\"$app\",\"status\":\"failed\",\"commit\":\"${{ github.sha }}\",\"runUrl\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}" || echo "admin bildirimi yapilamadi: $app"
+          done

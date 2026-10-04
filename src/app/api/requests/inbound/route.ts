@@ -1,6 +1,7 @@
 import { fail } from "@/server/auth";
 import { addRequest } from "@/server/requests";
-import { bearerToken, MAX_BODY_BYTES, parseInbound, resolveRequestsSecret, secretMatches } from "@/lib/requests";
+import { bearerToken, MAX_BODY_BYTES, parseInbound, resolveRequestsSecret } from "@/lib/requests";
+import { secretMatches } from "@/server/secret";
 
 export async function POST(request: Request) {
   const secret = resolveRequestsSecret(process.env);

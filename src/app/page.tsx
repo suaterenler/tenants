@@ -41,10 +41,11 @@ type SortDir = "asc" | "desc";
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type BuildInfo = { commit: string | null; builtAt: string | null };
-type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null; receivedAt?: string } | null };
-type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline";
+type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null; receivedAt?: string } | null; failed: { commit: string; failedAt: string; runUrl: string | null } | null };
+type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline" | "failed";
 
 function versionState(version: ProgramVersion): VersionState {
+  if (version.failed) return "failed";
   if (!version.running) return "offline";
   const running = version.running.commit;
   if (!running) return "noInfo";
@@ -63,6 +64,7 @@ const VERSION_TONE: Record<VersionState, { chip: string; dot: string }> = {
   unknown: { chip: "border-border bg-muted/40", dot: "bg-sky-500" },
   noInfo: { chip: "border-border bg-muted/40", dot: "bg-muted-foreground/40" },
   offline: { chip: "border-destructive/40 bg-destructive/5", dot: "bg-destructive" },
+  failed: { chip: "border-destructive/60 bg-destructive/10", dot: "bg-destructive animate-pulse" },
 };
 
 function shortDate(value: string | null | undefined): string {
@@ -661,7 +663,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               const tone = VERSION_TONE[state];
               const label = t.tenants.versionState[state];
               const hint =
-                state === "pending"
+                state === "failed"
+                  ? t.tenants.versionFailed.replace("{commit}", version.failed?.commit.slice(0, 7) ?? "")
+                  : state === "pending"
                   ? t.tenants.versionPending.replace("{commit}", version.expected?.commit.slice(0, 7) ?? "")
                   : state === "current"
                     ? t.tenants.versionCurrent
@@ -670,8 +674,9 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                       : state === "noInfo"
                         ? t.tenants.versionNoInfo
                         : t.tenants.notConnected;
-              return (
-                <div key={version.key} title={hint} className={cn("flex flex-col gap-1.5 rounded-lg border p-3", tone.chip)}>
+              const cardClass = cn("flex flex-col gap-1.5 rounded-lg border p-3", tone.chip);
+              const card = (
+                <>
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-semibold">{version.name}</span>
                     <span className={cn("size-2.5 shrink-0 rounded-full", tone.dot)} />
@@ -684,7 +689,17 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                   <div className="truncate text-xs font-medium">
                     {label}
                     {state === "pending" ? <span className="font-mono"> → {version.expected?.commit.slice(0, 7)}</span> : null}
+                    {state === "failed" ? <span className="font-mono"> · {version.failed?.commit.slice(0, 7)}</span> : null}
                   </div>
+                </>
+              );
+              return version.failed?.runUrl ? (
+                <a key={version.key} href={version.failed.runUrl} target="_blank" rel="noopener noreferrer" title={hint} className={cardClass}>
+                  {card}
+                </a>
+              ) : (
+                <div key={version.key} title={hint} className={cardClass}>
+                  {card}
                 </div>
               );
             })}

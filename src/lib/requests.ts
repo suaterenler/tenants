@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { tenantCodeFromName } from "./slug";
 
 export const REQUEST_STATUSES = ["new", "contacted", "trial", "converted", "rejected"] as const;
@@ -126,16 +125,8 @@ export function resolveRequestsSecret(env: Record<string, string | undefined>): 
   return (env.TENANTS_SECRET ?? env.PLATFORM_SECRET)?.trim() || null;
 }
 
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value).digest();
-}
-
 export function bearerToken(header: string | null): string {
   return header !== null && header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-}
-
-export function secretMatches(token: string, secret: string): boolean {
-  return token !== "" && timingSafeEqual(digest(token), digest(secret));
 }
 
 export function isRequestStatus(value: unknown): value is RequestStatus {

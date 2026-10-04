@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addRequest, countNewRequests, deleteRequest, listRequests, updateRequest } from "@/server/requests";
-import { bearerToken, inDateRange, findSimilarRequests, tenantLinkAllowed, type TrialRequest, companyFrom, withDefaults, columnMatches, parseInbound, parsePatch, programForProduct, programNameForProduct, resolveRequestsSecret, secretMatches, trialExpiry } from "./requests";
+import { bearerToken, inDateRange, findSimilarRequests, tenantLinkAllowed, type TrialRequest, companyFrom, withDefaults, columnMatches, parseInbound, parsePatch, programForProduct, programNameForProduct, resolveRequestsSecret, trialExpiry } from "./requests";
+import { secretMatches } from "../server/secret";
 
 const valid = {
   source: "cms",

@@ -6,13 +6,18 @@ import { AgentError, agentCall, programList } from "./apps";
 
 export type BuildInfo = { commit: string | null; builtAt: string | null };
 export type Release = { commit: string; builtAt: string | null; receivedAt: string };
-export type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: Release | null };
+export type BuildFailure = { commit: string; failedAt: string; runUrl: string | null };
+export type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: Release | null; failed: BuildFailure | null };
 
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
 const NO_INFO: BuildInfo = { commit: null, builtAt: null };
 
 function releasesFile(): string {
   return path.join(process.env.DATA_DIR?.trim() || path.join(process.cwd(), "data"), "releases.json");
+}
+
+function failuresFile(): string {
+  return path.join(process.env.DATA_DIR?.trim() || path.join(process.cwd(), "data"), "build-failures.json");
 }
 
 export function releaseApps(): string[] {
@@ -28,6 +33,26 @@ export async function readReleases(): Promise<Record<string, Release>> {
   }
 }
 
+export async function readFailures(): Promise<Record<string, BuildFailure>> {
+  try {
+    const raw: unknown = JSON.parse(await readFile(failuresFile(), "utf8"));
+    return raw && typeof raw === "object" ? (raw as Record<string, BuildFailure>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function parseFailure(body: unknown): { app: string; failure: BuildFailure } | null {
+  if (!body || typeof body !== "object") return null;
+  const entry = body as Record<string, unknown>;
+  if (entry.status !== "failed") return null;
+  const app = typeof entry.app === "string" ? entry.app.trim() : "";
+  const commit = typeof entry.commit === "string" ? entry.commit.trim().toLowerCase() : "";
+  const runUrl = typeof entry.runUrl === "string" && entry.runUrl.startsWith("https://github.com/") ? entry.runUrl : null;
+  if (!releaseApps().includes(app) || !COMMIT_PATTERN.test(commit)) return null;
+  return { app, failure: { commit, failedAt: new Date().toISOString(), runUrl } };
+}
+
 export function parseRelease(body: unknown): { app: string; release: Release } | null {
   if (!body || typeof body !== "object") return null;
   const entry = body as Record<string, unknown>;
@@ -38,13 +63,27 @@ export function parseRelease(body: unknown): { app: string; release: Release } |
   return { app, release: { commit, builtAt, receivedAt: new Date().toISOString() } };
 }
 
-export async function recordRelease(app: string, release: Release): Promise<void> {
-  const file = releasesFile();
-  const next = { ...(await readReleases()), [app]: release };
+async function writeJson(file: string, value: unknown): Promise<void> {
   await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify(next, null, 2), { mode: 0o600 });
+  await writeFile(temp, JSON.stringify(value, null, 2), { mode: 0o600 });
   await rename(temp, file);
+}
+
+export async function recordRelease(app: string, release: Release): Promise<void> {
+  await writeJson(releasesFile(), { ...(await readReleases()), [app]: release });
+  await clearFailure(app);
+}
+
+export async function recordFailure(app: string, failure: BuildFailure): Promise<void> {
+  await writeJson(failuresFile(), { ...(await readFailures()), [app]: failure });
+}
+
+async function clearFailure(app: string): Promise<void> {
+  const current = await readFailures();
+  if (!(app in current)) return;
+  const { [app]: _removed, ...rest } = current;
+  await writeJson(failuresFile(), rest);
 }
 
 export function sameCommit(a: string | null | undefined, b: string | null | undefined): boolean {
@@ -71,14 +110,14 @@ function localExpected(running: BuildInfo | null, release: Release | undefined):
 }
 
 export async function programVersions(): Promise<ProgramVersion[]> {
-  const releases = await readReleases();
+  const [releases, failures] = await Promise.all([readReleases(), readFailures()]);
   const local = localBuild();
   const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || local.commit, builtAt: process.env.APP_BUILD_DATE?.trim() || local.builtAt };
   const programs = await Promise.all(
     programList().map(async (app) => {
       const running = await agentCall<BuildInfo>(app, "/version", { timeoutMs: 5000 }).catch((error: unknown) => (error instanceof AgentError && (error.status === 404 || error.message.startsWith("HTTP ")) ? NO_INFO : null));
-      return { key: app.key, name: app.name, running, expected: localExpected(running, releases[app.key]) };
+      return { key: app.key, name: app.name, running, expected: localExpected(running, releases[app.key]), failed: failures[app.key] ?? null };
     }),
   );
-  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: localExpected(own, releases.tenants) }];
+  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: localExpected(own, releases.tenants), failed: failures.tenants ?? null }];
 }
