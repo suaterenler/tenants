@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { fail, ok } from "@/server/auth";
-import { parseFailure, parseRelease, recordFailure, recordRelease } from "@/server/releases";
+import { parseBuilding, parseFailure, parseRelease, recordBuilding, recordFailure, recordRelease } from "@/server/releases";
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value).digest();
@@ -13,6 +13,11 @@ export async function POST(request: Request) {
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token || !timingSafeEqual(digest(token), digest(secret))) return fail("unauthorized", 401);
   const body: unknown = await request.json().catch(() => null);
+  const started = parseBuilding(body);
+  if (started) {
+    await recordBuilding(started.app, started.build);
+    return ok(null);
+  }
   const failed = parseFailure(body);
   if (failed) {
     await recordFailure(failed.app, failed.failure);

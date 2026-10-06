@@ -41,11 +41,12 @@ type SortDir = "asc" | "desc";
 type UsageRow = { app: string; slug: string; dbBytes: number | null; uploadBytes: number };
 type UsageResult = { rows: UsageRow[]; calculatedAt: string };
 type BuildInfo = { commit: string | null; builtAt: string | null };
-type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null; receivedAt?: string } | null; failed: { commit: string; failedAt: string; runUrl: string | null } | null };
-type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline" | "failed";
+type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: { commit: string; builtAt: string | null; receivedAt?: string } | null; failed: { commit: string; failedAt: string; runUrl: string | null } | null; building: { commit: string; startedAt: string; runUrl: string | null } | null };
+type VersionState = "current" | "pending" | "unknown" | "noInfo" | "offline" | "failed" | "building";
 
 function versionState(version: ProgramVersion): VersionState {
   if (version.failed) return "failed";
+  if (version.building) return "building";
   if (!version.running) return "offline";
   const running = version.running.commit;
   if (!running) return "noInfo";
@@ -65,6 +66,7 @@ const VERSION_TONE: Record<VersionState, { chip: string; dot: string }> = {
   noInfo: { chip: "border-border bg-muted/40", dot: "bg-muted-foreground/40" },
   offline: { chip: "border-destructive/40 bg-destructive/5", dot: "bg-destructive" },
   failed: { chip: "border-destructive/60 bg-destructive/10", dot: "bg-destructive animate-pulse" },
+  building: { chip: "border-sky-500/50 bg-sky-500/10", dot: "bg-sky-500 animate-pulse" },
 };
 
 function shortDate(value: string | null | undefined): string {
@@ -665,6 +667,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
               const hint =
                 state === "failed"
                   ? t.tenants.versionFailed.replace("{commit}", version.failed?.commit.slice(0, 7) ?? "")
+                  : state === "building"
+                  ? t.tenants.versionBuilding.replace("{commit}", version.building?.commit.slice(0, 7) ?? "")
                   : state === "pending"
                   ? t.tenants.versionPending.replace("{commit}", version.expected?.commit.slice(0, 7) ?? "")
                   : state === "current"
@@ -690,11 +694,13 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
                     {label}
                     {state === "pending" ? <span className="font-mono"> → {version.expected?.commit.slice(0, 7)}</span> : null}
                     {state === "failed" ? <span className="font-mono"> · {version.failed?.commit.slice(0, 7)}</span> : null}
+                    {state === "building" ? <span className="font-mono"> → {version.building?.commit.slice(0, 7)}</span> : null}
                   </div>
                 </>
               );
-              return version.failed?.runUrl ? (
-                <a key={version.key} href={version.failed.runUrl} target="_blank" rel="noopener noreferrer" title={hint} className={cardClass}>
+              const runUrl = state === "building" ? version.building?.runUrl : version.failed?.runUrl;
+              return runUrl ? (
+                <a key={version.key} href={runUrl} target="_blank" rel="noopener noreferrer" title={hint} className={cardClass}>
                   {card}
                 </a>
               ) : (

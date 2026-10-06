@@ -7,7 +7,8 @@ import { AgentError, agentCall, programList } from "./apps";
 export type BuildInfo = { commit: string | null; builtAt: string | null };
 export type Release = { commit: string; builtAt: string | null; receivedAt: string };
 export type BuildFailure = { commit: string; failedAt: string; runUrl: string | null };
-export type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: Release | null; failed: BuildFailure | null };
+export type BuildInProgress = { commit: string; startedAt: string; runUrl: string | null };
+export type ProgramVersion = { key: string; name: string; running: BuildInfo | null; expected: Release | null; failed: BuildFailure | null; building: BuildInProgress | null };
 
 const COMMIT_PATTERN = /^[0-9a-f]{7,40}$/;
 const NO_INFO: BuildInfo = { commit: null, builtAt: null };
@@ -15,6 +16,12 @@ const NO_INFO: BuildInfo = { commit: null, builtAt: null };
 function releasesFile(): string {
   return path.join(process.env.DATA_DIR?.trim() || path.join(process.cwd(), "data"), "releases.json");
 }
+
+function buildingFile(): string {
+  return path.join(process.env.DATA_DIR?.trim() || path.join(process.cwd(), "data"), "builds-in-progress.json");
+}
+
+const BUILDING_MAX_AGE_MS = 45 * 60 * 1000;
 
 function failuresFile(): string {
   return path.join(process.env.DATA_DIR?.trim() || path.join(process.cwd(), "data"), "build-failures.json");
@@ -40,6 +47,26 @@ export async function readFailures(): Promise<Record<string, BuildFailure>> {
   } catch {
     return {};
   }
+}
+
+export async function readBuilding(): Promise<Record<string, BuildInProgress>> {
+  try {
+    const raw: unknown = JSON.parse(await readFile(buildingFile(), "utf8"));
+    return raw && typeof raw === "object" ? (raw as Record<string, BuildInProgress>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function parseBuilding(body: unknown): { app: string; build: BuildInProgress } | null {
+  if (!body || typeof body !== "object") return null;
+  const entry = body as Record<string, unknown>;
+  if (entry.status !== "building") return null;
+  const app = typeof entry.app === "string" ? entry.app.trim() : "";
+  const commit = typeof entry.commit === "string" ? entry.commit.trim().toLowerCase() : "";
+  const runUrl = typeof entry.runUrl === "string" && entry.runUrl.startsWith("https://github.com/") ? entry.runUrl : null;
+  if (!releaseApps().includes(app) || !COMMIT_PATTERN.test(commit)) return null;
+  return { app, build: { commit, startedAt: new Date().toISOString(), runUrl } };
 }
 
 export function parseFailure(body: unknown): { app: string; failure: BuildFailure } | null {
@@ -73,10 +100,24 @@ async function writeJson(file: string, value: unknown): Promise<void> {
 export async function recordRelease(app: string, release: Release): Promise<void> {
   await writeJson(releasesFile(), { ...(await readReleases()), [app]: release });
   await clearFailure(app);
+  await clearBuilding(app);
 }
 
 export async function recordFailure(app: string, failure: BuildFailure): Promise<void> {
   await writeJson(failuresFile(), { ...(await readFailures()), [app]: failure });
+  await clearBuilding(app);
+}
+
+export async function recordBuilding(app: string, build: BuildInProgress): Promise<void> {
+  await writeJson(buildingFile(), { ...(await readBuilding()), [app]: build });
+  await clearFailure(app);
+}
+
+async function clearBuilding(app: string): Promise<void> {
+  const current = await readBuilding();
+  if (!(app in current)) return;
+  const { [app]: _removed, ...rest } = current;
+  await writeJson(buildingFile(), rest);
 }
 
 async function clearFailure(app: string): Promise<void> {
@@ -110,14 +151,18 @@ function localExpected(running: BuildInfo | null, release: Release | undefined):
 }
 
 export async function programVersions(): Promise<ProgramVersion[]> {
-  const [releases, failures] = await Promise.all([readReleases(), readFailures()]);
+  const [releases, failures, buildingAll] = await Promise.all([readReleases(), readFailures(), readBuilding()]);
+  const building = (key: string): BuildInProgress | null => {
+    const entry = buildingAll[key];
+    return entry && Date.now() - Date.parse(entry.startedAt) < BUILDING_MAX_AGE_MS ? entry : null;
+  };
   const local = localBuild();
   const own: BuildInfo = { commit: process.env.APP_COMMIT?.trim() || local.commit, builtAt: process.env.APP_BUILD_DATE?.trim() || local.builtAt };
   const programs = await Promise.all(
     programList().map(async (app) => {
       const running = await agentCall<BuildInfo>(app, "/version", { timeoutMs: 5000 }).catch((error: unknown) => (error instanceof AgentError && (error.status === 404 || error.message.startsWith("HTTP ")) ? NO_INFO : null));
-      return { key: app.key, name: app.name, running, expected: localExpected(running, releases[app.key]), failed: failures[app.key] ?? null };
+      return { key: app.key, name: app.name, running, expected: localExpected(running, releases[app.key]), failed: failures[app.key] ?? null, building: building(app.key) };
     }),
   );
-  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: localExpected(own, releases.tenants), failed: failures.tenants ?? null }];
+  return [...programs, { key: "tenants", name: "Yönetim", running: own, expected: localExpected(own, releases.tenants), failed: failures.tenants ?? null, building: building("tenants") }];
 }
