@@ -72,7 +72,7 @@ export function DatePicker({
             {effective && !disabled ? (
               <span
                 role="button"
-                tabIndex={0}
+                tabIndex={-1}
                 title={messages.common.clear}
                 aria-label={messages.common.clear}
                 onClick={(e) => {

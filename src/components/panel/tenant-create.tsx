@@ -34,7 +34,7 @@ export type Tenant = {
   domains: string[];
   createdAt: string;
 };
-export type Secret = { title: string; tenant: Tenant; password: string };
+export type Secret = { title: string; tenant: Tenant; username?: string; password: string };
 export type TenantForm = { app: string; slug: string; name: string; active: boolean; contactName: string; phone: string; email: string; expiresAt: string; disabledModules: string[]; domains: string };
 export type CreatedTenant = { app: string; slug: string; tenant: Tenant; adminPassword: string };
 
@@ -71,7 +71,7 @@ async function copyText(value: string, message: string): Promise<void> {
 export function CredentialsDialog({ secret, apps, onClose, onError }: { secret: Secret | null; apps: AppInfo[]; onClose: () => void; onError: (error: unknown) => void }) {
   return (
     <Dialog open={secret !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
-      {secret ? <CredentialsBody key={`${secret.tenant.app}:${secret.tenant.slug}:${secret.password}`} secret={secret} apps={apps} onClose={onClose} onError={onError} /> : null}
+      {secret ? <CredentialsBody key={`${secret.tenant.app}:${secret.tenant.slug}:${secret.username ?? ""}:${secret.password}`} secret={secret} apps={apps} onClose={onClose} onError={onError} /> : null}
     </Dialog>
   );
 }
@@ -83,7 +83,7 @@ function CredentialsBody({ secret, apps, onClose, onError }: { secret: Secret; a
   const address = tenantAddress(apps, secret.tenant.app, secret.tenant.slug, secret.tenant.domains);
   const rows = [
     { label: t.tenants.address, value: address || t.tenants.noAddress, link: address !== "" },
-    { label: t.tenants.adminUser, value: "admin", link: false },
+    { label: t.tenants.adminUser, value: secret.username ?? "admin", link: false },
     { label: t.tenants.adminPassword, value: secret.password, link: false },
   ];
 
@@ -91,7 +91,7 @@ function CredentialsBody({ secret, apps, onClose, onError }: { secret: Secret; a
     if (!mailTo.trim()) return;
     setMailing(true);
     try {
-      const result = await adminFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password } });
+      const result = await adminFetch<{ sentTo: string }>(`/tenants/${secret.tenant.app}/${secret.tenant.slug}/send-credentials`, { method: "POST", body: { to: mailTo.trim(), password: secret.password, username: secret.username ?? "admin" } });
       toast.success(t.tenants.credentialsSent.replace("{email}", result.sentTo));
     } catch (error) {
       onError(error);

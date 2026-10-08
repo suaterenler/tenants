@@ -19,6 +19,8 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
   const body = await readBody(request);
   const to = typeof body.to === "string" ? body.to.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const username = typeof body.username === "string" && body.username !== "" ? body.username : "admin";
+  if (username.length > 100) return fail("invalidRecord", 400);
   if (!EMAIL_PATTERN.test(to)) return fail("tenantInvalidEmail", 400);
   if (!password || password.length > 200) return fail("invalidRecord", 400);
   let tenant: TenantRecord | undefined;
@@ -34,7 +36,7 @@ export async function POST(request: Request, context: { params: Promise<{ app: s
   const fill = (text: string) => text.replace("{program}", app.name).replace("{name}", tenant.name);
   const rows: [string, string][] = [
     [tr.tenants.address, address],
-    [tr.tenants.adminUser, "admin"],
+    [tr.tenants.adminUser, username],
     [tr.tenants.adminPassword, password],
   ];
   try {

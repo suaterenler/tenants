@@ -116,14 +116,14 @@ export async function recordBuilding(app: string, build: BuildInProgress): Promi
 async function clearBuilding(app: string): Promise<void> {
   const current = await readBuilding();
   if (!(app in current)) return;
-  const { [app]: _removed, ...rest } = current;
+  const rest = Object.fromEntries(Object.entries(current).filter(([key]) => key !== app));
   await writeJson(buildingFile(), rest);
 }
 
 async function clearFailure(app: string): Promise<void> {
   const current = await readFailures();
   if (!(app in current)) return;
-  const { [app]: _removed, ...rest } = current;
+  const rest = Object.fromEntries(Object.entries(current).filter(([key]) => key !== app));
   await writeJson(failuresFile(), rest);
 }
 

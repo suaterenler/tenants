@@ -13,6 +13,7 @@ export function PasswordInput({
   autoComplete = "new-password",
   autoFocus,
   invalid,
+  defaultVisible = false,
 }: {
   id?: string;
   value: string;
@@ -20,9 +21,10 @@ export function PasswordInput({
   autoComplete?: string;
   autoFocus?: boolean;
   invalid?: boolean;
+  defaultVisible?: boolean;
 }) {
   const t = useT();
-  const [show, setShow] = useState(false);
+  const [show, setShow] = useState(defaultVisible);
   return (
     <div className="relative">
       <Input
@@ -41,6 +43,8 @@ export function PasswordInput({
         variant="ghost"
         size="icon-sm"
         className="absolute right-1 top-1/2 z-10 -translate-y-1/2"
+        tabIndex={-1}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={() => setShow((prev) => !prev)}
         aria-label={show ? t.auth.hidePassword : t.auth.showPassword}
         title={show ? t.auth.hidePassword : t.auth.showPassword}

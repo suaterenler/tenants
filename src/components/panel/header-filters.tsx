@@ -10,7 +10,7 @@ export function HeaderText({ value, onChange, label }: { value: string; onChange
     <div className="relative min-w-28 font-normal" onClick={(event) => event.stopPropagation()}>
       <Input className="h-8 pr-6 text-xs font-normal" value={value} onChange={(event) => onChange(event.target.value)} aria-label={label} placeholder={label} />
       {value ? (
-        <button type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => onChange("")} aria-label={label}>
+        <button tabIndex={-1} type="button" className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => onChange("")} aria-label={label}>
           <X className="size-3.5" />
         </button>
       ) : null}
@@ -23,7 +23,7 @@ export function HeaderSelect({ value, onChange, options, allLabel, label, classN
     <div className={`relative w-full font-normal ${className}`} onClick={(event) => event.stopPropagation()}>
       <OptionSelect compact value={value} onChange={onChange} options={options} emptyLabel={allLabel} ariaLabel={label} />
       {value ? (
-        <button type="button" className="absolute right-7 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => onChange("")} aria-label={label}>
+        <button tabIndex={-1} type="button" className="absolute right-7 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => onChange("")} aria-label={label}>
           <X className="size-3.5" />
         </button>
       ) : null}

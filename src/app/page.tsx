@@ -11,6 +11,7 @@ import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { DatePicker } from "@/components/panel/date-picker";
 import { Field } from "@/components/panel/field";
 import { PasswordInput } from "@/components/panel/password-input";
+import { ResetAdminDialog } from "@/components/panel/reset-admin-dialog";
 import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/header-filters";
 import { OptionSelect } from "@/components/panel/option-select";
 import { PhoneInput } from "@/components/panel/phone-input";
@@ -339,6 +340,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [form, setForm] = useState<TenantForm>(EMPTY_FORM);
   const [createOpen, setCreateOpen] = useState(false);
   const [secret, setSecret] = useState<Secret | null>(null);
+  const [resetTarget, setResetTarget] = useState<Tenant | null>(null);
+  const [resetBusy, setResetBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState("general");
   const [usage, setUsage] = useState<UsageResult | null>(null);
@@ -612,15 +615,19 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
     }
   }
 
-  async function resetAdmin(tenant: Tenant) {
-    const ok = await confirm({ message: t.tenants.resetAdminConfirm.replace("{name}", tenant.name), confirmText: t.tenants.resetAdmin, danger: true });
-    if (!ok) return;
+  async function resetAdmin(username: string, password: string) {
+    if (!resetTarget) return;
+    const tenant = resetTarget;
+    setResetBusy(true);
     try {
-      const result = await adminFetch<{ password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: {} });
+      const result = await adminFetch<{ username: string; password: string }>(`/tenants/${tenant.app}/${tenant.slug}/reset-admin`, { method: "POST", body: { username, ...(password ? { password } : {}) } });
+      setResetTarget(null);
       setDialogOpen(false);
-      setSecret({ title: t.tenants.passwordReset, tenant, password: result.password });
+      setSecret({ title: t.tenants.passwordReset, tenant, username: result.username, password: result.password });
     } catch (error) {
       handleError(error);
+    } finally {
+      setResetBusy(false);
     }
   }
 
@@ -1108,7 +1115,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <DialogFooter className="sm:justify-between">
             {editing ? (
               <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={() => void resetAdmin(editing)} disabled={saving}>
+                <Button type="button" variant="outline" onClick={() => setResetTarget(editing)} disabled={saving}>
                   <KeyRound className="size-4" />
                   {t.tenants.resetAdmin}
                 </Button>
@@ -1166,6 +1173,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       </Dialog>
 
       <CreateTenantDialog open={createOpen} apps={overview.apps} onClose={() => setCreateOpen(false)} onCreated={() => { setUsage(null); void load(); }} onError={handleError} />
+      <ResetAdminDialog name={resetTarget?.name ?? ""} isDemo={resetTarget?.slug === "demo"} open={resetTarget !== null} busy={resetBusy} onClose={() => setResetTarget(null)} onSubmit={(username, password) => void resetAdmin(username, password)} />
       <CredentialsDialog secret={secret} apps={overview.apps} onClose={() => setSecret(null)} onError={handleError} />
     </div>
   );

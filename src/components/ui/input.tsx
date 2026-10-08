@@ -84,6 +84,7 @@ function Input({
         <button
           type="button"
           tabIndex={-1}
+          onMouseDown={(event) => event.preventDefault()}
           title={t.common.clear}
           aria-label={t.common.clear}
           onClick={(event) => {

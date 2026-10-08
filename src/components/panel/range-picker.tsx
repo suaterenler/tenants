@@ -84,7 +84,7 @@ export function RangePicker({ value, onChange, future = false }: { value: RangeV
         </PopoverContent>
       </Popover>
       {has ? (
-        <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => apply({ from: "", to: "" })} aria-label={t.common.clear}>
+        <button tabIndex={-1} type="button" className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground" onClick={() => apply({ from: "", to: "" })} aria-label={t.common.clear}>
           <X className="size-3.5" />
         </button>
       ) : null}
