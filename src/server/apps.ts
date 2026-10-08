@@ -53,7 +53,7 @@ export class AgentError extends Error {
 type AgentBody<T> = { ok: true; data: T } | { ok: false; error: string; code?: string };
 
 export function tenantsSecret(): string {
-  const value = (process.env.TENANTS_SECRET ?? process.env.PLATFORM_SECRET)?.trim() ?? "";
+  const value = process.env.TENANTS_SECRET?.trim() ?? "";
   if (value.length < 32) throw new AgentError("programUnavailable", "TENANTS_SECRET tanımlı değil.", 502);
   return value;
 }

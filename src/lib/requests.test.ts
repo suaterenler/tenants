@@ -96,11 +96,10 @@ describe("tenantLinkAllowed", () => {
 });
 
 describe("secret", () => {
-  it("resolves TENANTS_SECRET then PLATFORM_SECRET", () => {
+  it("resolves TENANTS_SECRET", () => {
     expect(resolveRequestsSecret({})).toBeNull();
     expect(resolveRequestsSecret({ TENANTS_SECRET: "  " })).toBeNull();
     expect(resolveRequestsSecret({ TENANTS_SECRET: "a" })).toBe("a");
-    expect(resolveRequestsSecret({ PLATFORM_SECRET: "b" })).toBe("b");
   });
 
   it("compares tokens", () => {

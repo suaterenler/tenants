@@ -413,6 +413,15 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
 
   useEffect(() => {
     void loadVersions();
+    const tick = () => {
+      if (document.visibilityState === "visible") void loadVersions();
+    };
+    const timer = window.setInterval(tick, 15000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [loadVersions]);
 
   useEffect(() => {

@@ -122,7 +122,7 @@ export function sameSubmission(a: Pick<TrialRequest, "source" | "formSlug" | "su
 }
 
 export function resolveRequestsSecret(env: Record<string, string | undefined>): string | null {
-  return (env.TENANTS_SECRET ?? env.PLATFORM_SECRET)?.trim() || null;
+  return env.TENANTS_SECRET?.trim() || null;
 }
 
 export function bearerToken(header: string | null): string {
