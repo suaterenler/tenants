@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
-import { Archive, ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Database, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogIn, Pencil, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, Building2, ChevronLeft, ChevronRight, ChevronsUpDown, Copy, Database, Dices, DatabaseArrowDown, Download, ExternalLink, FolderDown, FolderOpen, Globe, HardDrive, Info, KeyRound, Loader2, LogIn, Pencil, Plus, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
@@ -11,6 +11,7 @@ import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { DatePicker } from "@/components/panel/date-picker";
 import { Field } from "@/components/panel/field";
 import { PasswordInput } from "@/components/panel/password-input";
+import { generatePassword } from "@/lib/password";
 import { ResetAdminDialog } from "@/components/panel/reset-admin-dialog";
 import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/header-filters";
 import { OptionSelect } from "@/components/panel/option-select";
@@ -274,6 +275,7 @@ function PasswordReset({ token, onDone }: { token: string; onDone: () => void })
   const t = useI18n().messages;
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
+  const [generated, setGenerated] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const mismatch = repeat !== "" && password !== repeat;
 
@@ -297,10 +299,29 @@ function PasswordReset({ token, onDone }: { token: string; onDone: () => void })
       <form onSubmit={(event) => void handleSubmit(event)} className="flex flex-col gap-4">
         <p className="text-center text-sm font-medium">{t.tenants.resetTitle}</p>
         <Field label={t.tenants.newPassword} htmlFor="new-password" required hint={t.tenants.passwordHint}>
-          <PasswordInput id="new-password" value={password} onChange={setPassword} autoFocus />
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <PasswordInput key={`new-${generated}`} id="new-password" value={password} onChange={setPassword} autoFocus defaultVisible={generated > 0} />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              tabIndex={-1}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const next = generatePassword();
+                setPassword(next);
+                setRepeat(next);
+                setGenerated((n) => n + 1);
+              }}
+            >
+              <Dices className="size-4" />
+              {t.tenants.passwordGenerate}
+            </Button>
+          </div>
         </Field>
         <Field label={t.tenants.newPasswordRepeat} htmlFor="new-password-repeat" required hint={mismatch ? t.tenants.passwordMismatch : undefined}>
-          <PasswordInput id="new-password-repeat" value={repeat} onChange={setRepeat} invalid={mismatch} />
+          <PasswordInput key={`repeat-${generated}`} id="new-password-repeat" value={repeat} onChange={setRepeat} invalid={mismatch} defaultVisible={generated > 0} />
         </Field>
         <Button type="submit" disabled={submitting || !password || password !== repeat}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
