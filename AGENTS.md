@@ -16,7 +16,7 @@ Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten u
 ## Özel alan adları
 - Kurumun `domains` alanı (Yönetim → Genel sekmesi). Alan adı tüm programlarda tekil olmalı (`domainConflict`)
 - `GET /admin/api/domains` (Bearer TENANTS_SECRET) → `{ routes: [{ domain, app, slug, target }], complete }`
-- `edge/server.mjs` (bağımlılıksız, port 3060): Apache'nin `app.erenleryazilim.com` dışındaki hostlarını alır, tabloya göre programın **öneksiz imajına** (`rootUrl`, örn. salon 3144, education 3143) Host + X-Forwarded-Host korunarak iletir. Tablo 30 sn'de bir, bilinmeyen host için en fazla 5 sn'de bir yenilenir
+- `edge/server.mjs` (bağımlılıksız, port 3051): Apache'nin `app.erenleryazilim.com` dışındaki hostlarını alır, tabloya göre programın **öneksiz imajına** (`rootUrl`, örn. salon 3055, education 3053) Host + X-Forwarded-Host korunarak iletir. Tablo 30 sn'de bir, bilinmeyen host için en fazla 5 sn'de bir yenilenir
 - Öneksiz imaj: `NEXT_PUBLIC_BASE_PATH=""`, `NEXT_PUBLIC_HOST_MODE=1`, tag `root-latest`. Proxy kurumu hosttan bulur, `/<kurum>/...` rotasına iç rewrite yapar; linkler öneksiz, localStorage anahtarları alan adına özel. Migration'ları önekli container yapar (`SKIP_DB_DEPLOY=1`)
 
 ## Ev Kuralları
@@ -27,7 +27,7 @@ Tüm programların (Education, Salon, …) kurumlarını tek ekrandan yöneten u
 
 ## Yayın
 - main'e push → GitHub Actions → `ghcr.io/suaterenler/tenants` (app + edge aynı imaj)
-- Sunucu: `/home/erenler/app.erenleryazilim.com/tenants/` (compose: `app` 127.0.0.1:3050, `edge` 127.0.0.1:3060; .env; update.sh; cron 2 dk)
+- Sunucu: `/home/erenler/app.erenleryazilim.com/tenants/` (compose: `app` 127.0.0.1:3050, `edge` 127.0.0.1:3051, `db` (PostgreSQL, `shared-db`) 127.0.0.1:5439; .env; update.sh; cron 2 dk)
 - `TENANTS_SECRET` Education ve Salon `.env` ile aynı olmalı
 
 <!-- BEGIN:nextjs-agent-rules -->
