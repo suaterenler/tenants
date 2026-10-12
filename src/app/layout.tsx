@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
 import { cookies } from "next/headers";
 import { Providers } from "@/components/providers";
 import { LOCALE_COOKIE, resolveLocale } from "@/lib/i18n";
 import { THEME_COOKIE, resolveTheme } from "@/lib/theme";
+import "@/fonts/geist.css";
 import "./globals.css";
-
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin", "latin-ext"] });
 
 export const metadata: Metadata = {
   title: "Erenler Yönetim",
@@ -20,7 +18,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
 
   return (
     <html lang={locale} className={theme === "dark" ? "dark" : undefined} suppressHydrationWarning>
-      <body className={`${geistSans.variable} antialiased`}>
+      <body className="antialiased">
         <Providers locale={locale} theme={theme}>
           {children}
         </Providers>
