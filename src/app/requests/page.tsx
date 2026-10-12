@@ -21,6 +21,7 @@ import { formatDateTime } from "@/lib/format";
 import { excelDate, writeExcel } from "@/lib/excel";
 import { columnMatches, findSimilarRequests, inDateRange, programForProduct, programNameForProduct, REQUEST_STATUSES, trialExpiry, type RequestStatus, type SimilarReason, type TrialRequest } from "@/lib/requests";
 import { cn } from "@/lib/utils";
+import { useRetained } from "@/lib/use-retained";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -116,7 +117,8 @@ function RequestManager({ onSignOut }: { onSignOut: () => void }) {
   const currentPage = Math.min(page, pageCount);
   const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const newCount = items.filter((item) => item.status === "new").length;
-  const selected = items.find((item) => item.id === selectedId) ?? null;
+  const liveSelected = items.find((item) => item.id === selectedId) ?? null;
+  const selected = useRetained(liveSelected);
   const similarById = useMemo(() => new Map(items.map((item) => [item.id, findSimilarRequests(item, items)])), [items]);
   const selectedSimilar = selected ? (similarById.get(selected.id) ?? []) : [];
   const creatingAccounts = creating ? (similarById.get(creating.id) ?? []).filter((entry) => entry.request.tenantSlug && entry.request.tenantApp) : [];
@@ -418,7 +420,7 @@ function RequestManager({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </main>
 
-      <Dialog open={selected !== null} onOpenChange={(next) => (next || busy ? undefined : setSelectedId(null))}>
+      <Dialog open={liveSelected !== null} onOpenChange={(next) => (next || busy ? undefined : setSelectedId(null))}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>

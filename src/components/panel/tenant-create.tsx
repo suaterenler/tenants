@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { adminFetch, AdminRequestError } from "@/lib/admin-client";
+import { useRetained } from "@/lib/use-retained";
 import { isReservedTenantCode, isValidTenantCode, tenantCodeFromName, TENANT_CODE_MAX, uniqueTenantCode } from "@/lib/slug";
 
 export type ProgramModule = { key: string; label: string };
@@ -69,9 +70,10 @@ async function copyText(value: string, message: string): Promise<void> {
 }
 
 export function CredentialsDialog({ secret, apps, onClose, onError }: { secret: Secret | null; apps: AppInfo[]; onClose: () => void; onError: (error: unknown) => void }) {
+  const shown = useRetained(secret);
   return (
     <Dialog open={secret !== null} onOpenChange={(open) => (open ? undefined : onClose())}>
-      {secret ? <CredentialsBody key={`${secret.tenant.app}:${secret.tenant.slug}:${secret.username ?? ""}:${secret.password}`} secret={secret} apps={apps} onClose={onClose} onError={onError} /> : null}
+      {shown ? <CredentialsBody key={`${shown.tenant.app}:${shown.tenant.slug}:${shown.username ?? ""}:${shown.password}`} secret={shown} apps={apps} onClose={onClose} onError={onError} /> : null}
     </Dialog>
   );
 }

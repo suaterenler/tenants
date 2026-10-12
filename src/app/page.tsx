@@ -30,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useRetained } from "@/lib/use-retained";
 import { CreateTenantDialog, CredentialsDialog, domainUrl, EMPTY_FORM, panelUrl, tenantAddress, type AppInfo, type Secret, type Tenant, type TenantForm } from "@/components/panel/tenant-create";
 import { adminFetch, AdminRequestError, authHeaders, BASE_PATH, readToken, storeToken, type ApiBody } from "@/lib/admin-client";
 import { excelDate, writeExcel, type ExcelCell } from "@/lib/excel";
@@ -368,6 +369,8 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
   const [usage, setUsage] = useState<UsageResult | null>(null);
   const [deleting, setDeleting] = useState<Tenant | null>(null);
   const [deleteCode, setDeleteCode] = useState("");
+  const deletingShown = useRetained(deleting);
+  const resetShown = useRetained(resetTarget);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -1177,15 +1180,15 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
           <DialogHeader>
             <DialogTitle className="text-destructive">{t.tenants.deleteTitle}</DialogTitle>
           </DialogHeader>
-          {deleting ? (
+          {deletingShown ? (
             <form id="delete-form" onSubmit={(event) => { event.preventDefault(); void confirmDelete(); }} className="flex flex-col gap-3 text-sm">
-              <p>{t.tenants.deleteWarning.replace("{name}", deleting.name).replace("{program}", appName(deleting.app))}</p>
+              <p>{t.tenants.deleteWarning.replace("{name}", deletingShown.name).replace("{program}", appName(deletingShown.app))}</p>
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 <li>{t.tenants.deleteDatabase}</li>
                 <li>{t.tenants.deleteFiles}</li>
                 <li>{t.tenants.deleteRecord}</li>
               </ul>
-              <Field label={t.tenants.deleteTypeCode.replace("{code}", deleting.slug)} htmlFor="delete-code" required>
+              <Field label={t.tenants.deleteTypeCode.replace("{code}", deletingShown.slug)} htmlFor="delete-code" required>
                 <Input id="delete-code" value={deleteCode} onChange={(e) => setDeleteCode(e.target.value.trim())} autoComplete="off" autoFocus disabled={deleteBusy} />
               </Field>
             </form>
@@ -1194,7 +1197,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
             <Button type="button" variant="outline" onClick={() => setDeleting(null)} disabled={deleteBusy}>
               {t.common.cancel}
             </Button>
-            <Button type="submit" form="delete-form" variant="destructive" disabled={deleteBusy || !deleting || deleteCode !== deleting.slug}>
+            <Button type="submit" form="delete-form" variant="destructive" disabled={deleteBusy || !deletingShown || deleteCode !== deletingShown.slug}>
               {deleteBusy ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
               {t.tenants.deletePermanently}
             </Button>
@@ -1203,7 +1206,7 @@ function TenantManager({ onSignOut }: { onSignOut: () => void }) {
       </Dialog>
 
       <CreateTenantDialog open={createOpen} apps={overview.apps} onClose={() => setCreateOpen(false)} onCreated={() => { setUsage(null); void load(); }} onError={handleError} />
-      <ResetAdminDialog name={resetTarget?.name ?? ""} isDemo={resetTarget?.slug === "demo"} open={resetTarget !== null} busy={resetBusy} onClose={() => setResetTarget(null)} onSubmit={(username, password) => void resetAdmin(username, password)} />
+      <ResetAdminDialog name={resetShown?.name ?? ""} isDemo={resetShown?.slug === "demo"} open={resetTarget !== null} busy={resetBusy} onClose={() => setResetTarget(null)} onSubmit={(username, password) => void resetAdmin(username, password)} />
       <CredentialsDialog secret={secret} apps={overview.apps} onClose={() => setSecret(null)} onError={handleError} />
     </div>
   );

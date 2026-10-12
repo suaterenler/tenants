@@ -40,6 +40,7 @@ const ConfirmDetailContext = createContext<(options: ConfirmOptions) => Promise<
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const t = useT();
   const [state, setState] = useState<ConfirmOptions | null>(null);
+  const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState(false);
   const resolveRef = useRef<((value: ConfirmResult) => void) | null>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
@@ -50,6 +51,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
       returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setChecked(options.checkboxDefault === true);
       setState(options);
+      setOpen(true);
     });
   }, []);
 
@@ -61,14 +63,14 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const close = (value: boolean) => {
     resolveRef.current?.({ confirmed: value, checked });
     resolveRef.current = null;
-    setState(null);
+    setOpen(false);
   };
 
   return (
     <ConfirmContext.Provider value={confirm}>
       <ConfirmDetailContext.Provider value={confirmDetail}>
       {children}
-      <AlertDialog open={state !== null} onOpenChange={(open) => { if (!open) close(false); }}>
+      <AlertDialog open={open} onOpenChange={(next) => { if (!next) close(false); }}>
         <AlertDialogContent finalFocus={() => (returnFocusRef.current?.isConnected ? returnFocusRef.current : false)}>
           <AlertDialogHeader>
             {state?.alert ? (
