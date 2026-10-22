@@ -28,6 +28,7 @@ type Room = {
   approveJoin: boolean;
   guestShare: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  passes?: Map<string, string>;
 };
 
 type Hub = {
@@ -89,6 +90,11 @@ export function issueRequestToken(sessionId: string): string {
   return value;
 }
 
+function passesOf(room: Room): Map<string, string> {
+  room.passes ??= new Map();
+  return room.passes;
+}
+
 export function checkRequestToken(sessionId: string, value: string): boolean {
   const expected = hub().requestTokens.get(sessionId);
   return Boolean(expected) && secretMatches(value, expected ?? "");
@@ -137,7 +143,7 @@ async function openRoom(session: LiveSession): Promise<Room> {
   const existing = state.rooms.get(session.inviteCode);
   if (existing) return existing;
   const settings: LiveSettings = await getSettings();
-  const room: Room = { code: session.inviteCode, sessionId: session.id, members: new Map(), sharer: null, approveJoin: settings.approveJoin, guestShare: settings.guestShare, idleTimer: null };
+  const room: Room = { code: session.inviteCode, sessionId: session.id, members: new Map(), sharer: null, approveJoin: settings.approveJoin, guestShare: settings.guestShare, idleTimer: null, passes: new Map() };
   state.rooms.set(room.code, room);
   return room;
 }
@@ -197,8 +203,12 @@ async function admit(room: Room, member: Member): Promise<void> {
   broadcast(room, "join", view(member), member.peerId);
 }
 
-export async function joinRoom(session: LiveSession, input: { name: string; role: LiveRole; trusted: boolean }): Promise<{ member: Member; pending: boolean; snapshot: RoomSnapshot | null }> {
+export async function joinRoom(session: LiveSession, input: { name: string; role: LiveRole; trusted: boolean; pass?: string }): Promise<{ member: Member; pending: boolean; snapshot: RoomSnapshot | null }> {
   const room = await openRoom(session);
+  const passes = passesOf(room);
+  const passKey = input.role === "guest" && input.pass ? [...passes.keys()].find((key) => secretMatches(input.pass ?? "", key)) : undefined;
+  const previous = passKey ? room.members.get(passes.get(passKey) ?? "") : undefined;
+  if (previous) await removeMember(room, previous, "left");
   const member: Member = {
     peerId: token().slice(0, 12),
     token: token(),
@@ -212,7 +222,8 @@ export async function joinRoom(session: LiveSession, input: { name: string; role
     graceTimer: null,
   };
   room.members.set(member.peerId, member);
-  const needsApproval = input.role === "guest" && !input.trusted && room.approveJoin && hosts(room).length > 0;
+  if (passKey) passes.set(passKey, member.peerId);
+  const needsApproval = input.role === "guest" && !input.trusted && !passKey && room.approveJoin && hosts(room).length > 0;
   if (needsApproval) {
     for (const host of hosts(room)) sendTo(host, "knock", { peerId: member.peerId, name: member.name });
     scheduleGrace(room, member);
@@ -351,8 +362,10 @@ export async function command(code: string, member: Member, input: RoomCommand):
         return { ok: true };
       }
       await admit(room, target);
+      const pass = randomBytes(18).toString("base64url");
+      passesOf(room).set(pass, target.peerId);
       const session = await updateSession(room.sessionId, () => undefined);
-      if (session) sendTo(target, "admitted", snapshot(room, target, session));
+      if (session) sendTo(target, "admitted", { ...snapshot(room, target, session), pass });
       return { ok: true };
     }
     case "settings":
@@ -388,6 +401,8 @@ export async function command(code: string, member: Member, input: RoomCommand):
       const target = room.members.get(input.peerId);
       if (!target || target.role === "host") return { ok: false, error: "notFound" };
       sendTo(target, "kicked", {});
+      const passes = passesOf(room);
+      for (const [pass, peerId] of passes) if (peerId === target.peerId) passes.delete(pass);
       await removeMember(room, target, "kicked");
       return { ok: true };
     }

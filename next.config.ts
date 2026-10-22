@@ -18,6 +18,7 @@ const LIVE_HEADERS = [
 const nextConfig: NextConfig = {
   output: "standalone",
   basePath: "/admin",
+  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok-free.dev", "*.ngrok.app"],
   async headers() {
     return [
       { source: "/:path((?!live(?:/|$)).*)", headers: SECURITY_HEADERS },

@@ -22,7 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   const trusted = !asHost && typeof body.token === "string" && checkRequestToken(session.id, body.token);
   const name = asHost ? cleanName(body.name) || (await getSettings()).hostName : cleanName(body.name) || (trusted ? session.name : "");
   if (!name) return fail("liveNameRequired", 400);
-  const result = await joinRoom(session, { name, role: asHost ? "host" : "guest", trusted });
+  const result = await joinRoom(session, { name, role: asHost ? "host" : "guest", trusted, pass: typeof body.pass === "string" ? body.pass : undefined });
   return ok({
     peerId: result.member.peerId,
     peerToken: result.member.token,

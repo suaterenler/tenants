@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Bell, BellRing, CalendarClock, Check, Copy, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { AdminHeader } from "@/components/panel/admin-header";
@@ -25,7 +25,25 @@ type SiteMode = "hidden" | "available" | "request";
 
 const SITE_MODES: SiteMode[] = ["hidden", "available", "request"];
 
-type TextFilters = { name: string; phone: string; email: string };
+type TextFilters = { code: string; name: string; phone: string; email: string };
+type SessionSort = "createdAt" | "code" | "name" | "phone" | "email" | "status" | "duration" | "participants" | "reminder";
+type SortDir = "asc" | "desc";
+
+function guestCount(item: LiveSession): number {
+  return new Set(item.participants.filter((entry) => entry.role === "guest").map((entry) => entry.name)).size;
+}
+
+function sortValue(item: LiveSession, key: SessionSort): string | number {
+  if (key === "createdAt") return item.createdAt;
+  if (key === "code") return item.inviteCode;
+  if (key === "name") return item.name;
+  if (key === "phone") return item.phone;
+  if (key === "email") return item.email;
+  if (key === "status") return LIVE_STATUSES.indexOf(item.status);
+  if (key === "duration") return durationMinutes(item) ?? -1;
+  if (key === "participants") return guestCount(item);
+  return item.reminderAt ?? "";
+}
 
 type AudioCtor = typeof AudioContext;
 
@@ -188,7 +206,9 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [sound, setSound] = useState(readSoundPref);
   const [notify, setNotify] = useState<NotificationPermission | "unsupported">(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
   const [tab, setTab] = useState<"all" | "reminders">("all");
-  const [filters, setFilters] = useState<TextFilters>({ name: "", phone: "", email: "" });
+  const [sort, setSort] = useState<SessionSort>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [filters, setFilters] = useState<TextFilters>({ code: "", name: "", phone: "", email: "" });
   const [statusFilter, setStatusFilter] = useState("");
   const [dates, setDates] = useState({ from: "", to: "" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -210,7 +230,8 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const filtered = useMemo(() => {
     const source = tab === "reminders" ? items.filter((item) => item.reminderAt && !item.reminderDone) : items.filter((item) => item.status !== "waiting");
     const match = (value: string, query: string) => value.toLocaleLowerCase("tr").includes(query.trim().toLocaleLowerCase("tr"));
-    return source.filter((item) => {
+    const rows = source.filter((item) => {
+      if (filters.code && !item.inviteCode.replace(/-/g, "").toLocaleLowerCase("tr").includes(filters.code.replace(/-/g, "").trim().toLocaleLowerCase("tr"))) return false;
       if (filters.name && !match(item.name, filters.name)) return false;
       if (filters.phone && !item.phone.replace(/\D/g, "").includes(filters.phone.replace(/\D/g, ""))) return false;
       if (filters.email && !match(item.email, filters.email)) return false;
@@ -220,7 +241,36 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       if (dates.to && day > dates.to) return false;
       return true;
     });
-  }, [items, tab, filters, statusFilter, dates]);
+    const direction = sortDir === "asc" ? 1 : -1;
+    return rows.sort((a, b) => {
+      const left = sortValue(a, sort);
+      const right = sortValue(b, sort);
+      if (left === "" && right !== "") return 1;
+      if (right === "" && left !== "") return -1;
+      const result = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), "tr", { numeric: true, sensitivity: "base" });
+      return result * direction;
+    });
+  }, [items, tab, filters, statusFilter, dates, sort, sortDir]);
+
+  function toggleSort(key: SessionSort) {
+    if (sort === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else {
+      setSort(key);
+      setSortDir(key === "createdAt" ? "desc" : "asc");
+    }
+  }
+
+  function sortHead(key: SessionSort, label: string, className?: string) {
+    const active = sort === key;
+    return (
+      <TableHead className={className} aria-sort={active ? (sortDir === "asc" ? "ascending" : "descending") : "none"}>
+        <button type="button" className="inline-flex cursor-pointer items-center gap-1 hover:text-foreground" onClick={() => toggleSort(key)}>
+          {label}
+          {active ? sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" /> : <ChevronsUpDown className="size-3 opacity-40" />}
+        </button>
+      </TableHead>
+    );
+  }
 
   const statusOptions = LIVE_STATUSES.filter((status) => status !== "waiting").map((status) => ({ value: status, label: t.live.statuses[status] }));
 
@@ -656,19 +706,23 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-56">{t.live.date}</TableHead>
-                  <TableHead className="min-w-40">{t.live.name}</TableHead>
-                  <TableHead className="min-w-36">{t.live.phone}</TableHead>
-                  <TableHead className="min-w-40">{t.live.email}</TableHead>
-                  <TableHead className="w-36 min-w-36">{t.live.status}</TableHead>
-                  <TableHead className="w-24">{t.live.duration}</TableHead>
-                  <TableHead className="w-24">{t.live.participants}</TableHead>
-                  <TableHead className="min-w-36">{t.live.reminder}</TableHead>
+                  {sortHead("createdAt", t.live.date, "min-w-56")}
+                  {sortHead("code", t.live.code, "w-28 min-w-28")}
+                  {sortHead("name", t.live.name, "min-w-40")}
+                  {sortHead("phone", t.live.phone, "min-w-36")}
+                  {sortHead("email", t.live.email, "min-w-40")}
+                  {sortHead("status", t.live.status, "w-36 min-w-36")}
+                  {sortHead("duration", t.live.duration, "w-24")}
+                  {sortHead("participants", t.live.participants, "w-24")}
+                  {sortHead("reminder", t.live.reminder, "min-w-36")}
                   <TableHead className="w-20" />
                 </TableRow>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
                     <HeaderDateRange from={dates.from} to={dates.to} onChange={(from, to) => setDates({ from, to })} />
+                  </TableHead>
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderText value={filters.code} onChange={(value) => setFilters((current) => ({ ...current, code: value }))} label={t.live.code} />
                   </TableHead>
                   <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
                     <HeaderText value={filters.name} onChange={(value) => setFilters((current) => ({ ...current, name: value }))} label={t.live.name} />
@@ -691,7 +745,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
               <TableBody>
                 {loading && items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       <span className="flex flex-col items-center gap-2">
                         <Loader2 className="size-6 animate-spin" />
                         {t.common.loading}
@@ -700,7 +754,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                   </TableRow>
                 ) : filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       <span className="flex flex-col items-center gap-2">
                         {tab === "reminders" ? <CalendarClock className="size-6" /> : <Video className="size-6" />}
                         {tab === "reminders" ? t.live.noReminders : t.live.empty}
@@ -711,7 +765,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                   filtered.map((item) => {
                     const minutes = durationMinutes(item);
                     const due = isReminderDue(item);
-                    const people = new Set(item.participants.filter((entry) => entry.role === "guest").map((entry) => entry.name)).size;
+                    const people = guestCount(item);
                     return (
                       <TableRow key={item.id} className="cursor-pointer" onClick={() => open(item)}>
                         <TableCell className="text-sm">
@@ -720,6 +774,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                             <RelativeTimeChip value={item.createdAt} />
                           </div>
                         </TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{item.inviteCode || "—"}</TableCell>
                         <TableCell className={cn("text-sm", item.isNew && "font-semibold")}>
                           <span className="flex items-center gap-2">
                             {item.isNew ? <span className="size-2 shrink-0 rounded-full bg-sky-500" /> : null}
@@ -747,7 +802,18 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                         <TableCell>
                           <StatusPill status={item.status} />
                         </TableCell>
-                        <TableCell className="text-sm tabular-nums">{minutes ? t.live.minutes.replace("{count}", String(minutes)) : "—"}</TableCell>
+                        <TableCell className="text-sm tabular-nums">
+                          {minutes ? (
+                            t.live.minutes.replace("{count}", String(minutes))
+                          ) : item.status === "active" && item.startedAt ? (
+                            <span className="inline-flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                              <span className="size-1.5 rounded-full bg-current" />
+                              {t.live.running}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {people > 0 ? (
                             <span className="inline-flex items-center gap-1 text-muted-foreground" title={item.participants.filter((entry) => entry.role === "guest").map((entry) => entry.name).join(", ")}>

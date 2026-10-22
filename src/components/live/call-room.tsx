@@ -508,6 +508,8 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
 
   const speakingPeer = peers.find((peer) => peer.speaking)?.peerId ?? null;
   const currentSpeaker = selfTalking.current ? "me" : (speakingPeer ?? activeSpeaker);
+  const [lastRemote, setLastRemote] = useState<string | null>(null);
+  if (speakingPeer && speakingPeer !== lastRemote) setLastRemote(speakingPeer);
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "end" });
@@ -546,6 +548,81 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     } catch {
       toast.error(t.pipFailed);
     }
+  }
+
+  function backgroundMenu(trigger: React.ReactElement) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={trigger} />
+        <DropdownMenuContent className="dark w-64 border-white/10 bg-neutral-900 text-neutral-100" side="bottom" align="center">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t.bg}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={background.kind === "blur" ? `blur-${background.strength}` : background.kind}
+              onValueChange={(value) => {
+                const key = String(value);
+                if (key === "none") void changeBackground({ kind: "none" });
+                else if (key === "blur-6") void changeBackground({ kind: "blur", strength: 6 });
+                else if (key === "blur-16") void changeBackground({ kind: "blur", strength: 16 });
+              }}
+            >
+              <DropdownMenuRadioItem value="none">{t.bgNone}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="blur-6">{t.bgBlurLight}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="blur-16">{t.bgBlurStrong}</DropdownMenuRadioItem>
+              {background.kind === "image" && background.src.startsWith("data:") ? <DropdownMenuRadioItem value="image">{t.bgImage}</DropdownMenuRadioItem> : null}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t.bgColor}</DropdownMenuLabel>
+            <div className="grid grid-cols-5 gap-1.5 px-1.5 pb-1.5">
+              {BACKGROUND_COLORS.map((color) => {
+                const selected = background.kind === "color" && background.color === color;
+                return (
+                  <DropdownMenuItem
+                    key={color}
+                    onClick={() => void changeBackground({ kind: "color", color })}
+                    title={color}
+                    aria-label={`${t.bgColor} ${color}`}
+                    className={cn("flex aspect-square items-center justify-center rounded-lg p-0 ring-offset-2 ring-offset-neutral-900 focus:ring-2 focus:ring-white/60", selected && "ring-2 ring-white")}
+                    style={{ background: color }}
+                  >
+                    {selected ? <Check className="size-4 text-white drop-shadow" /> : null}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{t.bgTemplates}</DropdownMenuLabel>
+            <div className="grid grid-cols-3 gap-1.5 px-1.5 pb-1.5">
+              {BACKGROUND_TEMPLATES.map((name) => {
+                const src = `${BASE_PATH}/live/backgrounds/${name}.webp`;
+                const selected = background.kind === "image" && background.src === src;
+                return (
+                  <DropdownMenuItem
+                    key={name}
+                    onClick={() => void changeBackground({ kind: "image", src })}
+                    title={t.bgTemplate[name]}
+                    aria-label={t.bgTemplate[name]}
+                    className={cn("relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-cover bg-center p-0 ring-offset-2 ring-offset-neutral-900 focus:ring-2 focus:ring-white/60", selected && "ring-2 ring-white")}
+                    style={{ backgroundImage: `url(${BASE_PATH}/live/backgrounds/${name}-thumb.webp)` }}
+                  >
+                    {selected ? <Check className="size-4 text-white drop-shadow" /> : null}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => uploadRef.current?.click()}>
+            <ImagePlus className="size-4" />
+            {t.bgUpload}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
   }
 
   const knockKey = role === "host" ? room.knocks.map((knock) => knock.peerId).join(",") : "";
@@ -750,15 +827,27 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         {icon}
       </button>
     );
-    const pin = tileButton(pinned === id ? t.unpin : t.pin, () => togglePin(id), pinned === id ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />, pinned === id ? "opacity-100" : "opacity-0 group-hover/tile:opacity-100");
+    const pin = tileButton(pinned === id ? t.unpin : t.pin, () => togglePin(id), pinned === id ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />, pinned === id ? "opacity-100" : "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100");
     if (id === "me") {
       return (
         <div className="group/tile relative size-full">
           <SelfTile videoRef={attachLocal} name={me} camOn={camOn} mirror={facing !== "environment"} micOn={micOn} blocked={blocked} level={level} small={small} youLabel={t.you} blockedText={t.cameraBlocked} host={role === "host"} hostLabel={t.host} />
-          <div className="absolute top-2 left-2 z-10 flex gap-1">
-            {pin}
-            {tileButton(t.rename, () => setRenaming(me), <Pencil className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100")}
-          </div>
+          {small && touch ? null : (
+            <div className="absolute top-2 left-2 z-10 flex gap-1">
+              {pin}
+              {tileButton(t.rename, () => setRenaming(me), <Pencil className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100")}
+            </div>
+          )}
+          {touch && camOn && !blocked ? (
+            <div className={cn("absolute z-10 flex", small ? "top-1.5 left-1.5 gap-1" : "right-2 bottom-2 gap-1.5")}>
+              {backgroundMenu(
+                <button type="button" title={t.bg} aria-label={t.bg} className={cn("inline-flex items-center justify-center rounded-full bg-black/60 text-white", small ? "size-8" : "size-9", background.kind !== "none" && "bg-sky-600")}>
+                  {backgroundBusy ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
+                </button>,
+              )}
+              {canFlip ? tileButton(t.flipCamera, () => void startMedia(micId, "", facing === "environment" ? "user" : "environment"), <SwitchCamera className="size-4" />, small ? "size-8 rounded-full" : "size-9 rounded-full") : null}
+            </div>
+          ) : null}
         </div>
       );
     }
@@ -769,7 +858,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} inPip={pipOn && !sharerPeer?.screen && peer.peerId === pipPeer?.peerId} onPipExit={() => void togglePip()} t={t} />
         <div className="absolute top-2 left-2 z-10 flex gap-1">
           {pin}
-          {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 hover:bg-red-600") : null}
+          {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100 hover:bg-red-600") : null}
         </div>
       </div>
     );
@@ -778,8 +867,15 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   const tiles = useMemo(() => ["me", ...peers.map((peer) => peer.peerId)], [peers]);
   const sharerPeer = someoneElseSharing ? peers.find((peer) => peer.peerId === sharer) : undefined;
   const sharerName = sharer === "me" ? me : (sharerPeer?.name ?? "");
-  const pipPeer = peers.find((peer) => peer.peerId === focusId && peer.camera && peer.stream) ?? peers.find((peer) => peer.camera && peer.stream) ?? peers[0];
+  const pipCandidates = [pinned, speakingPeer, lastRemote, focusId];
+  const pipPeer =
+    pipCandidates.map((id) => peers.find((peer) => peer.peerId === id && peer.camera && peer.stream)).find(Boolean) ??
+    peers.find((peer) => peer.camera && peer.stream) ??
+    peers[0];
   const pipStream = sharerPeer?.screen ?? pipPeer?.stream ?? null;
+  const canFlip = touch && Boolean(facing) && devices.videoinput.length > 1;
+  const pipHiddenId = touch && pipOn && !sharerPeer?.screen ? pipPeer?.peerId : undefined;
+  const gridTiles = tiles.filter((id) => id !== pipHiddenId);
   const mine =(message: RoomMessage) => (message.peerId ? message.peerId === room.selfId : message.author === me && message.role === role);
 
   return (
@@ -792,7 +888,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
             <span className="truncate text-sm font-medium">Erenler Yazılım</span>
             <span className="flex items-center gap-2 text-xs text-neutral-400">
               <span className="font-mono">{code}</span>
-              <span className="tabular-nums">{elapsed}</span>
+              <span className="text-amber-400 tabular-nums">{elapsed}</span>
             </span>
           </div>
           <QualityChip quality={quality} />
@@ -823,89 +919,15 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
             labelOff={t.cameraOff}
             disabled={blocked}
             menuLabel={t.devices}
-            groups={[{ label: t.camera, items: devices.videoinput, value: camId, onChange: (id) => { setCamId(id); void startMedia(micId, id); } }]}
+            groups={canFlip ? [] : [{ label: t.camera, items: devices.videoinput, value: camId, onChange: (id) => { setCamId(id); void startMedia(micId, id); } }]}
           />
-          {touch && facing && devices.videoinput.length > 1 ? (
-            <ToolButton label={t.flipCamera} disabled={blocked || !camOn} onClick={() => void startMedia(micId, "", facing === "environment" ? "user" : "environment")}>
-              <SwitchCamera className="size-5" />
-            </ToolButton>
-          ) : null}
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
+          {touch
+            ? null
+            : backgroundMenu(
                 <ToolButton label={t.bg} active={background.kind !== "none"} disabled={blocked || !camOn} className="hidden sm:inline-flex">
                   {backgroundBusy ? <Loader2 className="size-5 animate-spin" /> : <WandSparkles className="size-5" />}
-                </ToolButton>
-              }
-            />
-            <DropdownMenuContent className="dark w-64 border-white/10 bg-neutral-900 text-neutral-100" side="bottom" align="center">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t.bg}</DropdownMenuLabel>
-                <DropdownMenuRadioGroup
-                  value={background.kind === "blur" ? `blur-${background.strength}` : background.kind}
-                  onValueChange={(value) => {
-                    const key = String(value);
-                    if (key === "none") void changeBackground({ kind: "none" });
-                    else if (key === "blur-6") void changeBackground({ kind: "blur", strength: 6 });
-                    else if (key === "blur-16") void changeBackground({ kind: "blur", strength: 16 });
-                  }}
-                >
-                  <DropdownMenuRadioItem value="none">{t.bgNone}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="blur-6">{t.bgBlurLight}</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="blur-16">{t.bgBlurStrong}</DropdownMenuRadioItem>
-                  {background.kind === "image" && background.src.startsWith("data:") ? <DropdownMenuRadioItem value="image">{t.bgImage}</DropdownMenuRadioItem> : null}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t.bgColor}</DropdownMenuLabel>
-                <div className="grid grid-cols-5 gap-1.5 px-1.5 pb-1.5">
-                  {BACKGROUND_COLORS.map((color) => {
-                    const selected = background.kind === "color" && background.color === color;
-                    return (
-                      <DropdownMenuItem
-                        key={color}
-                        onClick={() => void changeBackground({ kind: "color", color })}
-                        title={color}
-                        aria-label={`${t.bgColor} ${color}`}
-                        className={cn("flex aspect-square items-center justify-center rounded-lg p-0 ring-offset-2 ring-offset-neutral-900 focus:ring-2 focus:ring-white/60", selected && "ring-2 ring-white")}
-                        style={{ background: color }}
-                      >
-                        {selected ? <Check className="size-4 text-white drop-shadow" /> : null}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </div>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuGroup>
-                <DropdownMenuLabel>{t.bgTemplates}</DropdownMenuLabel>
-                <div className="grid grid-cols-3 gap-1.5 px-1.5 pb-1.5">
-                  {BACKGROUND_TEMPLATES.map((name) => {
-                    const src = `${BASE_PATH}/live/backgrounds/${name}.webp`;
-                    const selected = background.kind === "image" && background.src === src;
-                    return (
-                      <DropdownMenuItem
-                        key={name}
-                        onClick={() => void changeBackground({ kind: "image", src })}
-                        title={t.bgTemplate[name]}
-                        aria-label={t.bgTemplate[name]}
-                        className={cn("relative flex aspect-video items-center justify-center overflow-hidden rounded-lg bg-cover bg-center p-0 ring-offset-2 ring-offset-neutral-900 focus:ring-2 focus:ring-white/60", selected && "ring-2 ring-white")}
-                        style={{ backgroundImage: `url(${BASE_PATH}/live/backgrounds/${name}-thumb.webp)` }}
-                      >
-                        {selected ? <Check className="size-4 text-white drop-shadow" /> : null}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </div>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => uploadRef.current?.click()}>
-                <ImagePlus className="size-4" />
-                {t.bgUpload}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                </ToolButton>,
+              )}
           <input
             ref={uploadRef}
             type="file"
@@ -1011,6 +1033,10 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         </div>
 
         <div className="ml-auto flex items-center gap-3">
+          <span className="flex items-center gap-2 text-xs text-neutral-400 sm:hidden">
+            <span className="font-mono">{code}</span>
+            <span className="text-amber-400 tabular-nums">{elapsed}</span>
+          </span>
           <div className="hidden items-center rounded-full bg-white/10 p-0.5 sm:flex" role="group" aria-label={t.view}>
             {(
               [
@@ -1078,27 +1104,29 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
       <div className="flex min-h-0 flex-1 pb-16 sm:pb-0">
         <main className="relative min-w-0 flex-1 p-2 sm:p-3">
           {peers.length === 0 && !sharer ? (
-            <div className="relative flex h-full items-center justify-center rounded-xl bg-neutral-900/60 ring-1 ring-white/5">
-              <div className="flex max-w-sm flex-col items-center gap-3 p-6 text-center">
-                <span className="flex size-14 items-center justify-center rounded-full bg-white/10 text-neutral-300">
-                  <Users className="size-7" />
-                </span>
-                <h2 className="text-lg font-semibold">{role === "host" ? t.alone : t.waitingOthers}</h2>
-                <p className="text-sm text-neutral-400">{role === "host" ? t.aloneHint : t.waitingOthersHint}</p>
-                {role === "host" ? (
-                  <div className="mt-1 flex flex-wrap justify-center gap-2">
-                    <Button variant="secondary" onClick={() => void copyInvite()}>
-                      <Copy className="size-4" />
-                      {all.live.copyLink}
-                    </Button>
-                    <Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => setConfirm({ message: t.endConfirm, label: t.end, action: endForAll })}>
-                      <PhoneOff className="size-4" />
-                      {t.end}
-                    </Button>
-                  </div>
-                ) : null}
+            <div className="flex h-full flex-col gap-2 sm:gap-3 lg:flex-row">
+              <div className="min-h-0 flex-1">{renderTile("me", false)}</div>
+              <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl bg-neutral-900/60 ring-1 ring-white/5">
+                <div className="flex max-w-sm flex-col items-center gap-3 p-6 text-center">
+                  <span className="flex size-14 items-center justify-center rounded-full bg-white/10 text-neutral-300">
+                    <Users className="size-7" />
+                  </span>
+                  <h2 className="text-lg font-semibold">{role === "host" ? t.alone : t.waitingOthers}</h2>
+                  <p className="text-sm text-neutral-400">{role === "host" ? t.aloneHint : t.waitingOthersHint}</p>
+                  {role === "host" ? (
+                    <div className="mt-1 flex flex-wrap justify-center gap-2">
+                      <Button variant="secondary" onClick={() => void copyInvite()}>
+                        <Copy className="size-4" />
+                        {all.live.copyLink}
+                      </Button>
+                      <Button className="bg-red-600 text-white hover:bg-red-700" onClick={() => setConfirm({ message: t.endConfirm, label: t.end, action: endForAll })}>
+                        <PhoneOff className="size-4" />
+                        {t.end}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
-              <div className="absolute right-3 bottom-3 aspect-video w-32 shadow-2xl sm:w-48">{renderTile("me", true)}</div>
             </div>
           ) : sharer ? (
             <div className="flex h-full flex-col gap-2 lg:flex-row">
@@ -1118,9 +1146,9 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
               </div>
             </div>
           ) : view === "grid" ? (
-            <div className={cn("grid h-full auto-rows-fr gap-2 sm:gap-3", GRID_COLUMNS[Math.min(tiles.length, 12)], tiles.length > 4 && "auto-rows-[minmax(7rem,1fr)] overflow-y-auto")}>
+            <div className={cn("grid h-full auto-rows-fr gap-2 sm:gap-3", GRID_COLUMNS[Math.min(gridTiles.length, 12)], gridTiles.length > 4 && "auto-rows-[minmax(7rem,1fr)] overflow-y-auto")}>
               {tiles.map((id) => (
-                <div key={id} className="min-h-0">
+                <div key={id} className={id === pipHiddenId ? "hidden" : "min-h-0"}>
                   {renderTile(id, false)}
                 </div>
               ))}
@@ -1425,34 +1453,36 @@ function DeviceButton({
         {meter !== undefined && on ? <span className="absolute inset-x-0 bottom-0 bg-emerald-400/40 transition-[height] duration-75" style={{ height: `${Math.round(meter * 100)}%` }} /> : null}
         <span className="relative">{on ? iconOn : iconOff}</span>
       </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button type="button" title={menuLabel} aria-label={menuLabel} className="inline-flex h-10 w-6 items-center justify-center rounded-r-full text-white/80 hover:bg-white/10 max-[380px]:hidden">
-              <ChevronUp className="size-3.5" />
-            </button>
-          }
-        />
-        <DropdownMenuContent className="dark w-[26rem] max-w-[calc(100vw-1rem)] border-white/10 bg-neutral-900 text-neutral-100" side="bottom" align="center">
-          {groups.map((group, index) => (
-            <DropdownMenuGroup key={group.label}>
-              {index > 0 ? <DropdownMenuSeparator /> : null}
-              <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
-              {group.items.length === 0 ? (
-                <div className="px-2 py-1.5 text-xs text-neutral-500">—</div>
-              ) : (
-                <DropdownMenuRadioGroup value={group.value} onValueChange={(value) => group.onChange(String(value))}>
-                  {group.items.map((item, itemIndex) => (
-                    <DropdownMenuRadioItem key={item.deviceId || itemIndex} value={item.deviceId} title={item.label || undefined}>
-                      <span className="min-w-0 flex-1 truncate">{item.label || `${group.label} ${itemIndex + 1}`}</span>
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              )}
-            </DropdownMenuGroup>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {groups.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button type="button" title={menuLabel} aria-label={menuLabel} className="inline-flex h-10 w-6 items-center justify-center rounded-r-full text-white/80 hover:bg-white/10 max-[380px]:hidden">
+                <ChevronUp className="size-3.5" />
+              </button>
+            }
+          />
+          <DropdownMenuContent className="dark w-[26rem] max-w-[calc(100vw-1rem)] border-white/10 bg-neutral-900 text-neutral-100" side="bottom" align="center">
+            {groups.map((group, index) => (
+              <DropdownMenuGroup key={group.label}>
+                {index > 0 ? <DropdownMenuSeparator /> : null}
+                <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+                {group.items.length === 0 ? (
+                  <div className="px-2 py-1.5 text-xs text-neutral-500">—</div>
+                ) : (
+                  <DropdownMenuRadioGroup value={group.value} onValueChange={(value) => group.onChange(String(value))}>
+                    {group.items.map((item, itemIndex) => (
+                      <DropdownMenuRadioItem key={item.deviceId || itemIndex} value={item.deviceId} title={item.label || undefined}>
+                        <span className="min-w-0 flex-1 truncate">{item.label || `${group.label} ${itemIndex + 1}`}</span>
+                      </DropdownMenuRadioItem>
+                    ))}
+                  </DropdownMenuRadioGroup>
+                )}
+              </DropdownMenuGroup>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
     </div>
   );
 }

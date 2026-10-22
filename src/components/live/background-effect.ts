@@ -14,6 +14,7 @@ function loadSegmenter(): Promise<ImageSegmenter> {
       const { FilesetResolver, ImageSegmenter } = await import("@mediapipe/tasks-vision");
       const fileset = await FilesetResolver.forVisionTasks(WASM_URL);
       const options = { runningMode: "VIDEO" as const, outputCategoryMask: false, outputConfidenceMasks: true };
+      if (window.matchMedia("(pointer: coarse)").matches) return ImageSegmenter.createFromOptions(fileset, { ...options, baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" } });
       try {
         return await ImageSegmenter.createFromOptions(fileset, { ...options, baseOptions: { modelAssetPath: MODEL_URL, delegate: "GPU" } });
       } catch {
@@ -31,16 +32,21 @@ export class BackgroundEffect {
   private video = document.createElement("video");
   private canvas = document.createElement("canvas");
   private mask = document.createElement("canvas");
+  private small = document.createElement("canvas");
+  private filterSupported = "filter" in CanvasRenderingContext2D.prototype;
   private image: HTMLImageElement | null = null;
   private mode: BackgroundMode = { kind: "none" };
   private segmenter: ImageSegmenter | null = null;
   private output: MediaStream | null = null;
   private running = false;
   private lastTime = -1;
+  private emptyFrames = 0;
 
   constructor() {
     this.video.muted = true;
     this.video.playsInline = true;
+    this.video.setAttribute("aria-hidden", "true");
+    this.video.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1";
   }
 
   async start(source: MediaStream, mode: BackgroundMode): Promise<MediaStream> {
@@ -56,6 +62,7 @@ export class BackgroundEffect {
   }
 
   async setSource(source: MediaStream) {
+    if (!this.video.isConnected) document.body.appendChild(this.video);
     const track = source.getVideoTracks()[0];
     this.video.srcObject = track ? new MediaStream([track]) : null;
     await this.video.play().catch(() => undefined);
@@ -77,6 +84,7 @@ export class BackgroundEffect {
     this.output?.getTracks().forEach((track) => track.stop());
     this.output = null;
     this.video.srcObject = null;
+    this.video.remove();
   }
 
   private loop = () => {
@@ -121,11 +129,18 @@ export class BackgroundEffect {
       return;
     }
     const pixels = maskCtx.createImageData(maskWidth, maskHeight);
+    let person = 0;
     for (let index = 0; index < values.length; index += 1) {
       pixels.data[index * 4 + 3] = Math.round(values[index] * 255);
+      if (values[index] > 0.5) person += 1;
+    }
+    result.close();
+    this.emptyFrames = person < values.length * 0.01 ? this.emptyFrames + 1 : 0;
+    if (this.emptyFrames > 15) {
+      ctx.drawImage(video, 0, 0, width, height);
+      return;
     }
     maskCtx.putImageData(pixels, 0, 0);
-    result.close();
 
     ctx.save();
     ctx.clearRect(0, 0, width, height);
@@ -142,6 +157,23 @@ export class BackgroundEffect {
   private drawBackground(ctx: CanvasRenderingContext2D, width: number, height: number) {
     const mode = this.mode;
     if (mode.kind === "blur") {
+      if (!this.filterSupported) {
+        const factor = mode.strength > 10 ? 24 : 12;
+        const smallWidth = Math.max(8, Math.round(width / factor));
+        const smallHeight = Math.max(8, Math.round(height / factor));
+        if (this.small.width !== smallWidth || this.small.height !== smallHeight) {
+          this.small.width = smallWidth;
+          this.small.height = smallHeight;
+        }
+        const smallCtx = this.small.getContext("2d");
+        if (smallCtx) {
+          smallCtx.drawImage(this.video, 0, 0, smallWidth, smallHeight);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = "high";
+          ctx.drawImage(this.small, 0, 0, width, height);
+        }
+        return;
+      }
       ctx.filter = `blur(${mode.strength}px)`;
       ctx.drawImage(this.video, -mode.strength * 2, -mode.strength * 2, width + mode.strength * 4, height + mode.strength * 4);
       ctx.filter = "none";

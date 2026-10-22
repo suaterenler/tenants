@@ -159,6 +159,22 @@ export class RoomClient {
     return headers;
   }
 
+  private readPass(): string {
+    try {
+      return window.sessionStorage.getItem(`erenler_live_pass_${this.code}`) ?? "";
+    } catch {
+      return "";
+    }
+  }
+
+  private storePass(pass: string) {
+    try {
+      window.sessionStorage.setItem(`erenler_live_pass_${this.code}`, pass);
+    } catch {
+      return;
+    }
+  }
+
   async join(name: string): Promise<void> {
     this.joinName = name;
     this.set({ phase: "joining", error: "" });
@@ -166,7 +182,7 @@ export class RoomClient {
     const response = await fetch(`${API}/${this.code}/join`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ role: this.state.role, name, token: this.token || undefined }),
+      body: JSON.stringify({ role: this.state.role, name, token: this.token || undefined, pass: this.readPass() || undefined }),
     }).catch(() => null);
     if (!response) {
       this.set({ phase: "error", error: "network" });
@@ -277,6 +293,7 @@ export class RoomClient {
         this.set({ knocks: [...this.state.knocks.filter((knock) => knock.peerId !== data.peerId), { peerId: String(data.peerId), name: String(data.name) }] });
         return;
       case "admitted":
+        if (typeof data.pass === "string") this.storePass(data.pass);
         this.applySnapshot(raw as Snapshot);
         return;
       case "denied":
@@ -334,12 +351,34 @@ export class RoomClient {
     return link;
   }
 
+  private tuneSenders(pc: RTCPeerConnection) {
+    const transceivers = pc.getTransceivers();
+    const limits: [number, number, RTCDegradationPreference][] = [
+      [1, 2_500_000, "balanced"],
+      [2, 3_000_000, "maintain-resolution"],
+    ];
+    for (const [index, maxBitrate, preference] of limits) {
+      const sender = transceivers[index]?.sender;
+      if (!sender) continue;
+      const params = sender.getParameters();
+      if (!params.encodings?.length) continue;
+      params.encodings = params.encodings.map((encoding) => ({ ...encoding, maxBitrate }));
+      const withPreference: RTCRtpSendParameters & { degradationPreference?: RTCDegradationPreference } = { ...params, degradationPreference: preference };
+      void sender.setParameters(withPreference).catch(() => {
+        const fresh = sender.getParameters();
+        fresh.encodings = (fresh.encodings ?? []).map((encoding) => ({ ...encoding, maxBitrate }));
+        return sender.setParameters(fresh).catch(() => undefined);
+      });
+    }
+  }
+
   private onConnectionState(peerId: string, link: Link) {
     const state = link.pc.connectionState;
     if (state === "connected") {
       if (link.timer) clearTimeout(link.timer);
       link.timer = null;
       this.patchPeer(peerId, { rtc: "connected" });
+      this.tuneSenders(link.pc);
       return;
     }
     if (state === "disconnected" || state === "failed") {
