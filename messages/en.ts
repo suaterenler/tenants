@@ -153,6 +153,7 @@ export const en: Messages = {
     liveClosed: "The call has ended or the link is invalid.",
     liveNameRequired: "Please enter your name.",
     liveFileTooLarge: "Files can be at most 10 MB.",
+    liveBusy: "You are already in another call. End that call first.",
     tenantDomainTaken: "This domain is already assigned to another account.",
   },
   auth: {
@@ -261,6 +262,8 @@ export const en: Messages = {
     deleted: "Call record deleted",
     saved: "Call saved",
     settingsSaved: "Setting saved",
+    siteBusy: "You are in a call. The website offers \"wait or leave a note\".",
+    acceptBusy: "End the current call first",
     siteMode: "Live call on website",
     siteModes: { hidden: "Hide", available: "Available", request: "Requests" },
     siteHidden: "Hidden on the website; visitors do not see the banner.",

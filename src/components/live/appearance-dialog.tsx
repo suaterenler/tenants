@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw, X } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { Field } from "@/components/panel/field";
 import { Button } from "@/components/ui/button";
@@ -117,7 +117,6 @@ export function AppearanceDialog({ open, value, onClose, onSave }: { open: boole
               <span className="shrink-0 rounded-full px-4 py-2 text-xs font-semibold shadow" style={{ background: draft.buttonColor ? button : "linear-gradient(135deg,#2f7bff,#4fb8ff)", color: readable(button) }}>
                 {shown("startNow")}
               </span>
-              <X className="size-4 shrink-0 opacity-80" />
             </div>
             <div className="bg-muted/40 px-4 py-2 text-xs text-muted-foreground">{t.preview}</div>
           </div>

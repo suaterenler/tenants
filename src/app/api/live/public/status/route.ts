@@ -1,3 +1,4 @@
+import { hostInCall } from "@/server/live-hub";
 import { getSettings } from "@/server/live-store";
 import { corsJson, preflight, startLiveJobs } from "@/server/live-support";
 
@@ -10,5 +11,5 @@ export function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   startLiveJobs();
   const settings = await getSettings();
-  return corsJson(request, { available: settings.available, visibility: settings.visibility, appearance: settings.appearance });
+  return corsJson(request, { available: settings.available, busy: settings.available && hostInCall(), visibility: settings.visibility, appearance: settings.appearance });
 }

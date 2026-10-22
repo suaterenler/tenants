@@ -1,12 +1,12 @@
 import { fail, ok, readBody, requireSession } from "@/server/auth";
-import { emitAdmin } from "@/server/live-hub";
+import { emitAdmin, hostInCall } from "@/server/live-hub";
 import { getSettings, updateSettings } from "@/server/live-store";
 import { cleanName, LIVE_VISIBILITIES, parseAppearance, type LiveSettings, type LiveVisibility } from "@/lib/live";
 
 export async function GET(request: Request) {
   const denied = await requireSession(request);
   if (denied) return denied;
-  return ok(await getSettings());
+  return ok({ ...(await getSettings()), busy: hostInCall() });
 }
 
 export async function PUT(request: Request) {

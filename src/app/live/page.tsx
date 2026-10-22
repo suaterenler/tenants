@@ -154,6 +154,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const confirm = useConfirm();
   const [items, setItems] = useState<LiveSession[]>([]);
   const [settings, setSettings] = useState<LiveSettings | null>(null);
+  const [inCall, setInCall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hostDraft, setHostDraft] = useState<string | null>(null);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
@@ -174,7 +175,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const available = settings?.available ?? false;
   const visibility = settings?.visibility ?? "always";
   const mode: SiteMode = visibility === "hidden" || (visibility === "available" && !available) ? "hidden" : available ? "available" : "request";
-  const siteState = mode === "hidden" ? t.live.siteHidden : mode === "available" ? t.live.availableOn : t.live.availableOff;
+  const siteState = mode === "hidden" ? t.live.siteHidden : mode === "available" ? (inCall ? t.live.siteBusy : t.live.availableOn) : t.live.availableOff;
   const waiting = items.filter((item) => item.status === "waiting");
   const reminders = items.filter((item) => isReminderDue(item));
   const selected = items.find((item) => item.id === selectedId) ?? null;
@@ -235,7 +236,8 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
 
   async function reload() {
     try {
-      const [sessions, current] = await Promise.all([adminFetch<LiveSession[]>("/live/sessions"), adminFetch<LiveSettings>("/live/settings")]);
+      const [sessions, current] = await Promise.all([adminFetch<LiveSession[]>("/live/sessions"), adminFetch<LiveSettings & { busy?: boolean }>("/live/settings")]);
+      setInCall(current.busy === true);
       seenRef.current = new Set(sessions.map((session) => session.id));
       loadedRef.current = true;
       setItems(sessions);
@@ -266,6 +268,8 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       if (fresh && loadedRef.current) announce(session);
     } else if (name === "settings") {
       setSettings(payload as LiveSettings);
+    } else if (name === "busy") {
+      setInCall((payload as { busy?: boolean }).busy === true);
     }
   }
 
@@ -559,7 +563,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                           <PhoneOff className="size-4" />
                           {t.live.reject}
                         </Button>
-                        <Button className="bg-emerald-600 text-white hover:bg-emerald-700" onClick={() => void accept(item)}>
+                        <Button className="bg-emerald-600 text-white hover:bg-emerald-700" disabled={inCall} title={inCall ? t.live.acceptBusy : undefined} onClick={() => void accept(item)}>
                           <Video className="size-4" />
                           {t.live.accept}
                         </Button>

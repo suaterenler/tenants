@@ -1,5 +1,5 @@
 import { fail, ok, readBody, requireSession } from "@/server/auth";
-import { checkRequestToken, joinRoom } from "@/server/live-hub";
+import { checkRequestToken, hostInCall, joinRoom } from "@/server/live-hub";
 import { findByCode, getSettings } from "@/server/live-store";
 import { iceServers, startLiveJobs } from "@/server/live-support";
 import { cleanName, isInviteCode } from "@/lib/live";
@@ -15,6 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   if (asHost) {
     const denied = await requireSession(request);
     if (denied) return denied;
+    if (hostInCall(code)) return fail("liveBusy", 409);
   } else {
     if (session.status !== "active") return fail("liveClosed", 410);
   }

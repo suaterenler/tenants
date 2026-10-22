@@ -60,6 +60,13 @@
       maximize: "Büyüt",
       endCall: "Görüşmeyi kapat",
       unavailableErr: "Şu an canlı görüşme yapılamıyor. Talebinizi bırakın, sizi arayalım.",
+      busyErr: "Şu an başka bir görüşmedeyiz. Talebinizi bırakın, görüşme biter bitmez sizi arayalım.",
+      subBusy: "Şu an başka bir görüşme yapılıyor, bekleyebilir veya not bırakabilirsiniz.",
+      waitBtn: "Bekle",
+      noteBtn: "Not bırak",
+      queueTitle: "Şu an başka bir görüşme yapılıyor. Sıradasınız, görüşme biter bitmez bağlanacağız.",
+      queueNote: "Beklemeden not bırak",
+      stateBusy: "Şu an görüşmede",
       rateErr: "Çok fazla deneme yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.",
       netErr: "Bağlantı kurulamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.",
       failErr: "Talebiniz gönderilemedi. Lütfen tekrar deneyin.",
@@ -122,6 +129,13 @@
       maximize: "Maximize",
       endCall: "End call",
       unavailableErr: "A live call is not available right now. Leave your request and we will call you.",
+      busyErr: "We are in another call right now. Leave your request and we will call you as soon as it ends.",
+      subBusy: "Another call is in progress. You can wait or leave a note.",
+      waitBtn: "Wait",
+      noteBtn: "Leave a note",
+      queueTitle: "Another call is in progress. You are in the queue; we will connect as soon as it ends.",
+      queueNote: "Leave a note instead",
+      stateBusy: "In a call right now",
       rateErr: "Too many attempts. Please try again in a few minutes.",
       netErr: "Could not connect. Check your internet connection and try again.",
       failErr: "Your request could not be sent. Please try again.",
@@ -160,6 +174,9 @@ button{cursor:pointer}
 .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .dot.on{background:#22c55e;animation:pulse 1.8s ease-out infinite}
 .dot.off{background:#8b97ad}
+.dot.busy{background:#f59e0b}
+.cta.alt{background:transparent;color:inherit;box-shadow:none;border:1px solid currentColor;opacity:.9}
+@media (max-width:640px){.cta.alt{display:none}}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.65)}70%{box-shadow:0 0 0 9px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
 .btext{flex:1;min-width:0}
 .btitle{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -249,6 +266,7 @@ textarea{resize:vertical;min-height:80px}
   const ACCEPT_DELAY = 4000;
   const DEMO = !!window.ErenlerLiveDemo;
   const WAIT_MS = 60000;
+  const QUEUE_MS = 600000;
   const POLL_MS = 60000;
   const RETRY_MS = 2000;
   const CALL_PATH = "/admin/live/j/DEMO42";
@@ -277,7 +295,7 @@ textarea{resize:vertical;min-height:80px}
   let bannerOn = true;
   let refs = {};
   let drag = null;
-  const live = { known: false, available: false, visibility: "always", appearance: null, key: "" };
+  const live = { known: false, available: false, busy: false, visibility: "always", appearance: null, key: "" };
   let hostEl = null;
   const net = { ctl: null };
 
@@ -285,7 +303,7 @@ textarea{resize:vertical;min-height:80px}
     return {
       step: "closed", variant: "", opener: null, name: "", answer: "timeout",
       elapsed: 0, mediaError: "", audioOnly: false, camOn: true, micOn: true, timers: [],
-      error: "", id: null, token: ""
+      error: "", id: null, token: "", queued: false
     };
   }
   let st = fresh();
@@ -567,12 +585,14 @@ textarea{resize:vertical;min-height:80px}
 
   function buildWaiting() {
     refs.elapsed = el("span", { class: "tm", text: fmt(st.elapsed) });
-    return el("div", { class: "step wait" }, [
+    const parts = [
       el("div", { class: "avatar" }, [icon("user")]),
-      el("p", { class: "wait-title", text: t.waitTitle }),
-      el("p", { class: "elapsed-line" }, [icon("clock"), el("span", { text: t.elapsed + ": " }), refs.elapsed]),
-      el("button", { type: "button", class: "btn ghost end", text: t.cancel, on: { click: cancelWaiting } })
-    ]);
+      el("p", { class: "wait-title", text: st.queued ? t.queueTitle : t.waitTitle }),
+      el("p", { class: "elapsed-line" }, [icon("clock"), el("span", { text: t.elapsed + ": " }), refs.elapsed])
+    ];
+    if (st.queued) parts.push(el("button", { type: "button", class: "btn ghost", text: t.queueNote, on: { click: function () { abortLive(); go("phone", { variant: "timeout" }); } } }));
+    parts.push(el("button", { type: "button", class: "btn ghost end", text: t.cancel, on: { click: cancelWaiting } }));
+    return el("div", { class: "step wait" }, parts);
   }
 
   function setName(v) { st.name = v; }
@@ -793,6 +813,7 @@ textarea{resize:vertical;min-height:80px}
     if (status === 429 || code === "rateLimited") return t.rateErr;
     if (status === 0) return t.netErr;
     if (code === "unavailable") return t.unavailableErr;
+    if (code === "busy") return t.busyErr;
     if (code === "nameRequired" || code === "phoneRequired") return t.required;
     if (status === 401 || status === 404) return t.goneErr;
     return t.failErr;
@@ -973,6 +994,7 @@ textarea{resize:vertical;min-height:80px}
     st.error = errText(f.status, f.code);
     if (f.status === 409) {
       live.available = false;
+      live.busy = f.code === "busy";
       renderBanner();
       go("offline");
       return;
@@ -1005,10 +1027,12 @@ textarea{resize:vertical;min-height:80px}
         if (!j) return;
         const next = j.available === true;
         const visibility = j.visibility === "available" || j.visibility === "hidden" ? j.visibility : "always";
-        const key = JSON.stringify([next, visibility, j.appearance || null]);
+        const busy = j.busy === true;
+        const key = JSON.stringify([next, busy, visibility, j.appearance || null]);
         if (!live.known || key !== live.key) {
           live.known = true;
           live.available = next;
+          live.busy = busy;
           live.visibility = visibility;
           live.appearance = j.appearance || null;
           live.key = key;
@@ -1033,6 +1057,7 @@ textarea{resize:vertical;min-height:80px}
     if (step === "prepare") startMedia(st.audioOnly);
     if (step === "waiting") {
       st.elapsed = 0;
+      st.queued = live.busy && !DEMO;
       every(function () {
         st.elapsed += 1;
         if (refs.elapsed) refs.elapsed.textContent = fmt(st.elapsed);
@@ -1047,7 +1072,7 @@ textarea{resize:vertical;min-height:80px}
         later(function () {
           abortLive();
           go("phone", { variant: "timeout" });
-        }, WAIT_MS);
+        }, st.queued ? QUEUE_MS : WAIT_MS);
         startRequest();
       }
     }
@@ -1123,21 +1148,24 @@ textarea{resize:vertical;min-height:80px}
 
   function renderBanner() {
     const c = config();
+    const busy = c.available && live.busy && !DEMO;
     const cta = el("button", {
       type: "button",
       class: "cta",
-      text: c.available ? label("startNow") : label("requestCall"),
+      text: busy ? t.waitBtn : c.available ? label("startNow") : label("requestCall"),
       on: { click: function () { openModal(c.available ? "prepare" : "offline", cta); } }
     });
+    const note = busy ? el("button", { type: "button", class: "cta alt", text: t.noteBtn, on: { click: function () { openModal("offline", note); } } }) : null;
     banner.textContent = "";
     banner.hidden = !bannerOn || suppressed();
     banner.setAttribute("aria-label", label("title"));
     banner.append(
-      el("span", { class: "dot " + (c.available ? "on" : "off"), role: "img", "aria-label": c.available ? t.stateOn : t.stateOff }),
+      el("span", { class: "dot " + (busy ? "busy" : c.available ? "on" : "off"), role: "img", "aria-label": busy ? t.stateBusy : c.available ? t.stateOn : t.stateOff }),
       el("div", { class: "btext" }, [
         el("div", { class: "btitle", text: label("title") }),
-        el("div", { class: "bsub", text: c.available ? label("subOn") : label("subOff") })
+        el("div", { class: "bsub", text: busy ? t.subBusy : c.available ? label("subOn") : label("subOff") })
       ]),
+      note || "",
       cta
     );
     syncPadding();

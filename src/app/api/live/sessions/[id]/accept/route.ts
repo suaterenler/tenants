@@ -1,5 +1,5 @@
 import { fail, ok, requireSession } from "@/server/auth";
-import { emitAdmin, notifyRequest } from "@/server/live-hub";
+import { emitAdmin, hostInCall, notifyRequest } from "@/server/live-hub";
 import { getSession, updateSession } from "@/server/live-store";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -9,6 +9,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const current = await getSession(id);
   if (!current) return fail("notFound", 404);
   if (current.status !== "waiting") return fail("liveNotWaiting", 409);
+  if (hostInCall()) return fail("liveBusy", 409);
   const session = await updateSession(id, (item) => {
     item.status = "active";
     item.isNew = false;

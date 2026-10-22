@@ -152,6 +152,7 @@ export const tr = {
     liveClosed: "Görüşme kapanmış veya bağlantı geçersiz.",
     liveNameRequired: "Lütfen adınızı yazın.",
     liveFileTooLarge: "Dosya en fazla 10 MB olabilir.",
+    liveBusy: "Şu an başka bir görüşmedesiniz. Önce o görüşmeyi bitirin.",
   },
   auth: {
     madeBy: "{company} tarafından geliştirildi",
@@ -259,6 +260,8 @@ export const tr = {
     deleted: "Görüşme kaydı silindi",
     saved: "Görüşme kaydedildi",
     settingsSaved: "Ayar kaydedildi",
+    siteBusy: "Görüşmedesiniz. Sitede \"bekle veya not bırak\" seçeneği görünüyor.",
+    acceptBusy: "Önce süren görüşmeyi bitirin",
     siteMode: "Sitede canlı görüşme",
     siteModes: { hidden: "Gizle", available: "Müsait", request: "Talep" },
     siteHidden: "Sitede gizli; ziyaretçiler şeridi görmüyor.",

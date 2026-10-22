@@ -1,6 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { LIVE_ROOM_IDLE_HOURS, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
+import { LIVE_QUEUE_SECONDS, LIVE_ROOM_IDLE_HOURS, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
 import { secretMatches } from "./secret";
 import type { Emit } from "./sse";
 import { addParticipant, appendMessage, closeParticipant, expireWaiting, getSettings, updateSession } from "./live-store";
@@ -49,7 +49,7 @@ function hub(): Hub {
   const state = globalHub.__erenlerLiveHub;
   if (!state.sweeper) {
     state.sweeper = setInterval(() => {
-      void expireWaiting((LIVE_WAIT_SECONDS + 30) * 1000).then((expired) => {
+      void expireWaiting(((hostInCall() ? LIVE_QUEUE_SECONDS : LIVE_WAIT_SECONDS) + 30) * 1000).then((expired) => {
         for (const session of expired) {
           notifyRequest(session.id, "missed", {});
           emitAdmin("session", session);
@@ -142,6 +142,18 @@ async function openRoom(session: LiveSession): Promise<Room> {
   return room;
 }
 
+export function hostInCall(exceptCode?: string): boolean {
+  for (const room of hub().rooms.values()) {
+    if (room.code === exceptCode) continue;
+    if (hosts(room).length > 0) return true;
+  }
+  return false;
+}
+
+function emitBusy(): void {
+  emitAdmin("busy", { busy: hostInCall() });
+}
+
 export function roomOf(code: string): Room | null {
   return hub().rooms.get(code) ?? null;
 }
@@ -209,6 +221,7 @@ export async function joinRoom(session: LiveSession, input: { name: string; role
       item.endedAt = null;
     });
     broadcast(room, "host-back", {}, member.peerId);
+    emitBusy();
   }
   scheduleGrace(room, member);
   return { member, pending: false, snapshot: snapshot(room, member, session) };
@@ -253,6 +266,7 @@ async function removeMember(room: Room, member: Member, reason: string): Promise
       broadcast(room, "share", { peerId: null });
     }
     broadcast(room, "leave", { peerId: member.peerId, reason });
+    if (member.role === "host") emitBusy();
   }
   if (admitted(room).length === 0) {
     if (room.idleTimer) clearTimeout(room.idleTimer);
@@ -269,6 +283,7 @@ async function closeRoom(room: Room, reason: string): Promise<void> {
   room.members.clear();
   if (room.idleTimer) clearTimeout(room.idleTimer);
   hub().rooms.delete(room.code);
+  emitBusy();
   const session = await updateSession(room.sessionId, (item) => {
     if (item.status === "active") item.status = "completed";
     item.endedAt = new Date().toISOString();
