@@ -77,11 +77,13 @@ export function removeSubscription(endpoint: string): Promise<void> {
   });
 }
 
-export async function sendPush(payload: { title: string; body: string; url: string; tag: string }): Promise<void> {
+export async function sendPush(payload: { title: string; body: string; url: string; tag: string }): Promise<{ sent: number; failed: number }> {
   const data = await exclusive(load);
-  if (data.subscriptions.length === 0) return;
+  if (data.subscriptions.length === 0) return { sent: 0, failed: 0 };
   const vapid = keys(data);
   const gone: string[] = [];
+  let sent = 0;
+  let failed = 0;
   await Promise.all(
     data.subscriptions.map((subscription) =>
       webpush
@@ -90,10 +92,15 @@ export async function sendPush(payload: { title: string; body: string; url: stri
           urgency: "high",
           vapidDetails: { subject: `mailto:${adminEmail()}`, publicKey: vapid.publicKey, privateKey: vapid.privateKey },
         })
+        .then(() => {
+          sent += 1;
+        })
         .catch((error: { statusCode?: number }) => {
+          failed += 1;
           if (error.statusCode === 404 || error.statusCode === 410) gone.push(subscription.endpoint);
         }),
     ),
   );
   for (const endpoint of gone) await removeSubscription(endpoint);
+  return { sent, failed };
 }

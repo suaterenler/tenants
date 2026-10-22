@@ -25,7 +25,7 @@ const STATUS_STYLE: Record<LiveStatus, string> = {
 };
 
 export function inviteUrl(code: string): string {
-  return `${window.location.origin}${BASE_PATH}/live/j/${code}`;
+  return `${window.location.origin}${BASE_PATH}/live/join/${code}`;
 }
 
 export function StatusPill({ status }: { status: LiveStatus }) {

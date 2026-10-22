@@ -294,7 +294,7 @@ textarea{resize:vertical;min-height:80px}
   const QUEUE_MS = 600000;
   const POLL_MS = 60000;
   const RETRY_MS = 2000;
-  const CALL_PATH = "/admin/live/j/DEMO42";
+  const CALL_PATH = "/admin/live/join/DEMO42";
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   let ORIGIN = window.location.origin;
@@ -847,7 +847,7 @@ textarea{resize:vertical;min-height:80px}
   function savedCall() {
     try {
       var saved = JSON.parse(window.sessionStorage.getItem(CALL_KEY) || "null");
-      if (saved && typeof saved.url === "string" && saved.url.indexOf(ORIGIN + "/admin/live/j/") === 0 && Date.now() - saved.at < RESUME_MS) return saved;
+      if (saved && typeof saved.url === "string" && saved.url.indexOf(ORIGIN + "/admin/live/join/") === 0 && Date.now() - saved.at < RESUME_MS) return saved;
     } catch {
       return null;
     }
@@ -1105,7 +1105,7 @@ textarea{resize:vertical;min-height:80px}
       abortLive();
       clearTimers();
       rememberPending(null, "");
-      startCall(ORIGIN + "/admin/live/j/" + encodeURIComponent(data.code) + "?lang=" + LANG + "#t=" + encodeURIComponent(token));
+      startCall(ORIGIN + "/admin/live/join/" + encodeURIComponent(data.code) + "?lang=" + LANG + "#t=" + encodeURIComponent(token));
     } else if (name === "rejected" || name === "missed") {
       abortLive();
       go("phone", { variant: name === "rejected" ? "reject" : "timeout" });
@@ -1371,7 +1371,7 @@ textarea{resize:vertical;min-height:80px}
       callToggle,
       el("button", { type: "button", class: "icon-btn", title: t.endCall, "aria-label": t.endCall, on: { click: askEndCall } }, [icon("x")])
     ]);
-    frame = el("iframe", { title: t.callTitle, allow: "camera; microphone; display-capture; autoplay; fullscreen" });
+    frame = el("iframe", { title: t.callTitle, allow: "camera; microphone; display-capture; autoplay; fullscreen; picture-in-picture" });
     const grips = ["nw", "ne", "sw", "se"].map(function (corner) {
       const grip = el("span", { class: "grip " + corner, "aria-hidden": "true" });
       grip.addEventListener("pointerdown", function (e) {

@@ -18,11 +18,14 @@ const LIVE_HEADERS = [
 const nextConfig: NextConfig = {
   output: "standalone",
   basePath: "/admin",
+  async redirects() {
+    return [{ source: "/live/join/:code", destination: "/live/join/:code", permanent: true }];
+  },
   async headers() {
     return [
       { source: "/:path((?!live(?:/|$)).*)", headers: SECURITY_HEADERS },
       { source: "/live/:path*", headers: LIVE_HEADERS },
-      { source: "/live/j/:code", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${LIVE_FRAME_ORIGINS}` }] },
+      { source: "/live/join/:code", headers: [{ key: "Content-Security-Policy", value: `frame-ancestors 'self' ${LIVE_FRAME_ORIGINS}` }] },
       { source: "/live", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
       { source: "/live/room/:code", headers: [{ key: "X-Frame-Options", value: "DENY" }] },
     ];

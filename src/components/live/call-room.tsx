@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import {
   ArrowLeft,
   Ban,
@@ -24,6 +24,7 @@ import {
   Paperclip,
   Pencil,
   PhoneOff,
+  PictureInPicture2,
   Pin,
   PinOff,
   RefreshCw,
@@ -112,6 +113,42 @@ function readName(): string {
   } catch {
     return "";
   }
+}
+
+let chimeAudio: AudioContext | null = null;
+
+function knockChime(): void {
+  try {
+    chimeAudio ??= new AudioContext();
+    const ctx = chimeAudio;
+    if (ctx.state === "suspended") void ctx.resume();
+    const start = ctx.currentTime + 0.05;
+    for (const [offset, frequency] of [
+      [0, 988],
+      [0.22, 784],
+      [0.7, 988],
+      [0.92, 784],
+    ]) {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const at = start + offset;
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.35);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.4);
+    }
+  } catch {
+    return;
+  }
+}
+
+function noopSubscribe(): () => void {
+  return () => undefined;
 }
 
 function storeName(name: string) {
@@ -487,6 +524,44 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     return () => window.clearTimeout(timer);
   }, [notes, role, room.sessionId, room.hostNotes]);
 
+  const pipRef = useRef<HTMLVideoElement | null>(null);
+  const [pipOn, setPipOn] = useState(false);
+  const pipSupported = useSyncExternalStore(noopSubscribe, () => document.pictureInPictureEnabled === true, () => false);
+
+  async function togglePip() {
+    const video = pipRef.current;
+    if (!video) return;
+    try {
+      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      else await video.requestPictureInPicture();
+    } catch {
+      toast.error(t.pipFailed);
+    }
+  }
+
+  const knockKey = role === "host" ? room.knocks.map((knock) => knock.peerId).join(",") : "";
+
+  useEffect(() => {
+    if (!knockKey) return;
+    let count = 0;
+    knockChime();
+    const timer = window.setInterval(() => {
+      count += 1;
+      if (count >= 8) window.clearInterval(timer);
+      else knockChime();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [knockKey]);
+
+  function unlockAudio() {
+    client.resumeAudio();
+    const videos = [...document.querySelectorAll("video")].filter((video) => !video.muted);
+    void Promise.all(videos.map((video) => video.play())).then(
+      () => setAudioBlocked(false),
+      () => setAudioBlocked(true),
+    );
+  }
+
   function toggleMic() {
     const next = !micOn;
     setMicOn(next);
@@ -609,7 +684,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }
 
   async function copyInvite() {
-    await navigator.clipboard.writeText(`${window.location.origin}${BASE_PATH}/live/j/${code}${locale === "en" ? "?lang=en" : ""}`);
+    await navigator.clipboard.writeText(`${window.location.origin}${BASE_PATH}/live/join/${code}${locale === "en" ? "?lang=en" : ""}`);
     toast.success(all.live.linkCopied);
   }
 
@@ -694,10 +769,13 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   const tiles = useMemo(() => ["me", ...peers.map((peer) => peer.peerId)], [peers]);
   const sharerPeer = someoneElseSharing ? peers.find((peer) => peer.peerId === sharer) : undefined;
   const sharerName = sharer === "me" ? me : (sharerPeer?.name ?? "");
-  const mine = (message: RoomMessage) => (message.peerId ? message.peerId === room.selfId : message.author === me && message.role === role);
+  const pipPeer = peers.find((peer) => peer.peerId === focusId && peer.camera && peer.stream) ?? peers.find((peer) => peer.camera && peer.stream) ?? peers[0];
+  const pipStream = sharerPeer?.screen ?? pipPeer?.stream ?? null;
+  const mine =(message: RoomMessage) => (message.peerId ? message.peerId === room.selfId : message.author === me && message.role === role);
 
   return (
     <div className="dark flex h-dvh flex-col overflow-hidden bg-neutral-950 text-neutral-100">
+      <PipVideo videoRef={pipRef} stream={pipStream} onChange={setPipOn} />
       <header className="relative z-20 flex items-center gap-2 border-b border-white/10 bg-neutral-900 px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-sky-400 to-blue-600 text-sm font-bold text-white">E</span>
@@ -863,6 +941,11 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
               </button>
             ) : null}
           </div>
+          {pipSupported ? (
+            <ToolButton label={pipOn ? t.pipExit : t.pip} active={pipOn} disabled={!pipStream} onClick={() => void togglePip()}>
+              <PictureInPicture2 className="size-5" />
+            </ToolButton>
+          ) : null}
           {role === "host" ? (
             <ToolButton label={t.notes} active={panel === "notes"} onClick={() => openPanel("notes")}>
               <NotebookPen className="size-5" />
@@ -878,7 +961,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                 </div>
                 <p className="text-xs text-neutral-400">{t.inviteHint}</p>
                 <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">…/live/j/{code}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">…/live/join/{code}</span>
                   <Button size="xs" variant="secondary" onClick={() => void copyInvite()}>
                     <Copy className="size-3" />
                     {all.tenants.copy}
@@ -955,7 +1038,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
           {t.reconnecting}
         </div>
       ) : audioBlocked ? (
-        <button type="button" onClick={() => setAudioBlocked(false)} className="absolute top-16 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-sky-700">
+        <button type="button" onClick={unlockAudio} className="absolute top-16 left-1/2 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-sky-700">
           <Volume2 className="size-4" />
           {t.unlockAudio}
         </button>
@@ -1201,6 +1284,42 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
       ) : null}
     </div>
   );
+}
+
+function PipVideo({ videoRef, stream, onChange }: { videoRef: React.RefObject<HTMLVideoElement | null>; stream: MediaStream | null; onChange: (on: boolean) => void }) {
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const enter = () => onChange(true);
+    const leave = () => onChange(false);
+    video.addEventListener("enterpictureinpicture", enter);
+    video.addEventListener("leavepictureinpicture", leave);
+    const action = "enterpictureinpicture" as string as MediaSessionAction;
+    try {
+      navigator.mediaSession?.setActionHandler(action, () => {
+        if (video.srcObject && !document.pictureInPictureElement) void video.requestPictureInPicture().catch(() => undefined);
+      });
+    } catch {
+      void 0;
+    }
+    return () => {
+      video.removeEventListener("enterpictureinpicture", enter);
+      video.removeEventListener("leavepictureinpicture", leave);
+      try {
+        navigator.mediaSession?.setActionHandler(action, null);
+      } catch {
+        void 0;
+      }
+      if (document.pictureInPictureElement === video) void document.exitPictureInPicture().catch(() => undefined);
+    };
+  }, [videoRef, onChange]);
+  useEffect(() => {
+    const element = videoRef.current;
+    if (!element || element.srcObject === stream) return;
+    element.srcObject = stream;
+    if (stream) void element.play().catch(() => undefined);
+  }, [videoRef, stream]);
+  return <video ref={videoRef} autoPlay playsInline muted aria-hidden className="pointer-events-none fixed top-0 left-0 size-px opacity-0" />;
 }
 
 function StreamVideo({ stream, muted, className, sinkId, onBlocked }: { stream: MediaStream | null; muted?: boolean; className?: string; sinkId?: string; onBlocked?: () => void }) {

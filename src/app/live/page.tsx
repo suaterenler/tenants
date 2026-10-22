@@ -75,15 +75,41 @@ function beep(ctx: AudioContext, at: number, frequency: number): void {
   oscillator.stop(at + 0.22);
 }
 
-function playPattern(pattern: [number, number][]): void {
+let sharedAudio: AudioContext | null = null;
+
+function audioContext(): AudioContext | null {
+  if (sharedAudio) return sharedAudio;
   const Ctor: AudioCtor | undefined = window.AudioContext || (window as Window & { webkitAudioContext?: AudioCtor }).webkitAudioContext;
-  if (!Ctor) return;
+  if (!Ctor) return null;
   try {
-    const ctx = new Ctor();
+    sharedAudio = new Ctor();
+  } catch {
+    sharedAudio = null;
+  }
+  return sharedAudio;
+}
+
+function audioReady(): boolean {
+  return audioContext()?.state === "running";
+}
+
+function unlockSound(): Promise<boolean> {
+  const ctx = audioContext();
+  if (!ctx) return Promise.resolve(false);
+  if (ctx.state === "running") return Promise.resolve(true);
+  return ctx.resume().then(
+    () => ctx.state === "running",
+    () => false,
+  );
+}
+
+function playPattern(pattern: [number, number][]): void {
+  const ctx = audioContext();
+  if (!ctx) return;
+  try {
     if (ctx.state === "suspended") void ctx.resume();
     const start = ctx.currentTime + 0.05;
     for (const [offset, frequency] of pattern) beep(ctx, start + offset, frequency);
-    window.setTimeout(() => void ctx.close(), 4000);
   } catch {
     return;
   }
@@ -157,6 +183,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [inCall, setInCall] = useState(false);
   const [loading, setLoading] = useState(true);
   const [hostDraft, setHostDraft] = useState<string | null>(null);
+  const [soundReady, setSoundReady] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [sound, setSound] = useState(readSoundPref);
   const [notify, setNotify] = useState<NotificationPermission | "unsupported">(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
@@ -355,6 +382,20 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
     storeSoundPref(next);
   }
 
+  useEffect(() => {
+    const unlock = () => {
+      void unlockSound().then((ok) => setSoundReady(ok));
+    };
+    const timer = window.setTimeout(() => setSoundReady(audioReady()), 0);
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, []);
+
   async function askNotify() {
     if (typeof Notification === "undefined") return;
     const permission = await Notification.requestPermission();
@@ -523,6 +564,12 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                     </Button>
                   )}
                 </div>
+                {sound && !soundReady ? (
+                  <button type="button" onClick={() => void unlockSound().then((ok) => setSoundReady(ok))} className="flex items-center gap-1.5 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs text-amber-700 dark:text-amber-300">
+                    <VolumeX className="size-4 shrink-0" />
+                    {t.live.soundLocked}
+                  </button>
+                ) : null}
                 <button type="button" className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2 text-left hover:bg-muted" onClick={toggleSound}>
                   <span className="flex items-center gap-1.5 text-muted-foreground">
                     {sound ? <Volume2 className="size-4 shrink-0" /> : <VolumeX className="size-4 shrink-0" />}
