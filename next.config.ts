@@ -18,9 +18,6 @@ const LIVE_HEADERS = [
 const nextConfig: NextConfig = {
   output: "standalone",
   basePath: "/admin",
-  async redirects() {
-    return [{ source: "/live/join/:code", destination: "/live/join/:code", permanent: true }];
-  },
   async headers() {
     return [
       { source: "/:path((?!live(?:/|$)).*)", headers: SECURITY_HEADERS },
