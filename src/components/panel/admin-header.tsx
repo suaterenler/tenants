@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Building2, Inbox, LogOut } from "lucide-react";
+import { Building2, Inbox, LogOut, Video } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
 import { LocaleSwitcher } from "@/components/locale-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -12,10 +12,12 @@ import { cn } from "@/lib/utils";
 
 const COUNT_REFRESH_MS = 60_000;
 
-export function AdminHeader({ active, onSignOut, newCount }: { active: "tenants" | "requests"; onSignOut: () => void; newCount?: number }) {
+export function AdminHeader({ active, onSignOut, newCount, liveCount }: { active: "tenants" | "requests" | "live"; onSignOut: () => void; newCount?: number; liveCount?: number }) {
   const t = useI18n().messages;
   const [fetched, setFetched] = useState(0);
+  const [liveFetched, setLiveFetched] = useState(0);
   const count = newCount ?? fetched;
+  const callCount = liveCount ?? liveFetched;
 
   useEffect(() => {
     let alive = true;
@@ -25,8 +27,18 @@ export function AdminHeader({ active, onSignOut, newCount }: { active: "tenants"
           if (alive) setFetched(data.count);
         })
         .catch(() => undefined);
-    void load();
-    const timer = window.setInterval(() => void load(), COUNT_REFRESH_MS);
+    const loadLive = () =>
+      adminFetch<{ count: number }>("/live/count")
+        .then((data) => {
+          if (alive) setLiveFetched(data.count);
+        })
+        .catch(() => undefined);
+    const loadAll = () => {
+      void load();
+      void loadLive();
+    };
+    loadAll();
+    const timer = window.setInterval(loadAll, COUNT_REFRESH_MS);
     return () => {
       alive = false;
       window.clearInterval(timer);
@@ -38,14 +50,19 @@ export function AdminHeader({ active, onSignOut, newCount }: { active: "tenants"
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b bg-background/95 px-4 py-3 backdrop-blur">
       <nav className="flex items-center gap-1">
-        <Link href="/" className={link(active === "tenants")}>
+        <Link href="/" className={link(active === "tenants")} title={t.tenants.title}>
           <Building2 className="size-4" />
-          {t.tenants.title}
+          <span className="hidden sm:inline">{t.tenants.title}</span>
         </Link>
-        <Link href="/requests" className={link(active === "requests")}>
+        <Link href="/requests" className={link(active === "requests")} title={t.requests.title}>
           <Inbox className="size-4" />
-          {t.requests.title}
+          <span className="hidden sm:inline">{t.requests.title}</span>
           {count > 0 ? <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-5 text-white tabular-nums">{count}</span> : null}
+        </Link>
+        <Link href="/live" className={link(active === "live")} title={t.live.title}>
+          <Video className="size-4" />
+          <span className="hidden sm:inline">{t.live.title}</span>
+          {callCount > 0 ? <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[11px] font-semibold leading-5 text-white tabular-nums">{callCount}</span> : null}
         </Link>
       </nav>
       <div className="flex items-center gap-1">
