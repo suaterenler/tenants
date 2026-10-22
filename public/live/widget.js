@@ -254,6 +254,7 @@ textarea{resize:vertical;min-height:80px}
 .ok .ico svg{width:34px;height:34px}
 .done{align-items:center;text-align:center;justify-content:center}
 .call{position:fixed;inset:0;z-index:2147483600;display:flex;flex-direction:column;background:#050b18}
+.banner,.layer,.call:not(.mini){right:auto;width:100vw;max-width:100vw;box-sizing:border-box}
 .call .bar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:52px;color:var(--ew-banner-fg,#fff);background:var(--ew-banner,linear-gradient(90deg,#0b1a36,#14336b));user-select:none}
 .live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;flex:none}
 .call .ttl{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
