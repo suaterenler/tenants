@@ -36,6 +36,11 @@ export function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+export function sessionExpired(): void {
+  storeToken(null);
+  if (typeof window !== "undefined") window.location.replace(BASE_PATH);
+}
+
 export async function adminFetch<T>(path: string, init: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers = authHeaders();
   if (init.body !== undefined) headers["Content-Type"] = "application/json";
@@ -45,6 +50,7 @@ export async function adminFetch<T>(path: string, init: { method?: string; body?
     body: init.body === undefined ? undefined : JSON.stringify(init.body),
     cache: "no-store",
   });
+  if (response.status === 401 && headers.Authorization && !path.startsWith("/login") && !path.startsWith("/password")) sessionExpired();
   const payload = (await response.json().catch(() => null)) as ApiBody<T> | null;
   if (!payload) throw new AdminRequestError(`HTTP ${response.status}`, response.status);
   if (!payload.ok) throw new AdminRequestError(payload.error, response.status, payload.code ?? "");

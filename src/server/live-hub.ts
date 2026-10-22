@@ -142,6 +142,12 @@ async function openRoom(session: LiveSession): Promise<Room> {
   return room;
 }
 
+export function openRoomCount(): number {
+  let count = 0;
+  for (const room of hub().rooms.values()) if (admitted(room).length > 0) count += 1;
+  return count;
+}
+
 export function hostInCall(exceptCode?: string): boolean {
   for (const room of hub().rooms.values()) {
     if (room.code === exceptCode) continue;

@@ -1,5 +1,44 @@
 name: tenants
 
+x-app: &app
+  image: ${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}
+  restart: unless-stopped
+  network_mode: host
+  healthcheck:
+    test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${PORT}/admin"]
+    interval: 15s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+  volumes:
+    - data:/app/data
+  environment: &app-env
+    HOSTNAME: 127.0.0.1
+    TENANTS_PASSWORD: ${TENANTS_PASSWORD:-}
+    TENANTS_SECRET: ${TENANTS_SECRET:-}
+    SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
+    RELEASE_SECRET: ${RELEASE_SECRET:-}
+    EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3052/education}
+    SALON_URL: ${SALON_URL:-http://127.0.0.1:3054/salon}
+    EDUCATION_ROOT_URL: ${EDUCATION_ROOT_URL:-http://127.0.0.1:3053}
+    SALON_ROOT_URL: ${SALON_ROOT_URL:-http://127.0.0.1:3055}
+    ADMIN_EMAIL: ${ADMIN_EMAIL:-suaterenler@gmail.com}
+    PUBLIC_URL: ${PUBLIC_URL:-https://app.erenleryazilim.com}
+    MAIL_FROM: ${MAIL_FROM:-Erenler Yönetim <noreply@erenleryazilim.com>}
+    SMTP_HOST: ${SMTP_HOST:-127.0.0.1}
+    SMTP_PORT: ${SMTP_PORT:-25}
+    SMTP_USER: ${SMTP_USER:-}
+    SMTP_PASS: ${SMTP_PASS:-}
+    DATA_DIR: /app/data
+    TRUST_PROXY: "1"
+    LIVE_ORIGINS: ${LIVE_ORIGINS:-}
+    LIVE_ICE_SERVERS: ${LIVE_ICE_SERVERS:-}
+    LIVE_TURN_URL: ${LIVE_TURN_URL:-}
+    LIVE_TURN_SECRET: ${LIVE_TURN_SECRET:-}
+    LIVE_VAPID_PUBLIC_KEY: ${LIVE_VAPID_PUBLIC_KEY:-}
+    LIVE_VAPID_PRIVATE_KEY: ${LIVE_VAPID_PRIVATE_KEY:-}
+    NODE_ENV: production
+
 services:
   db:
     image: postgres:16-alpine
@@ -34,40 +73,37 @@ services:
       timeout: 5s
       retries: 10
 
-  app:
-    image: ${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}
-    container_name: tenants-app
+  gate:
+    image: node:24-alpine
+    container_name: tenants-gate
     restart: unless-stopped
     network_mode: host
+    command: ["node", "/gate/gate.mjs"]
+    volumes:
+      - ./gate.mjs:/gate/gate.mjs:ro
+      - ./active-port:/gate/active-port:ro
+    environment:
+      GATE_PORT: ${APP_PORT:-3050}
+      GATE_STATE: /gate/active-port
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${PORT}/admin"]
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${GATE_PORT}/__gate/health"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 30s
-    volumes:
-      - data:/app/data
+
+  app-blue:
+    <<: *app
+    container_name: tenants-app-blue
     environment:
-      HOSTNAME: 127.0.0.1
-      PORT: ${APP_PORT:-3050}
-      TENANTS_PASSWORD: ${TENANTS_PASSWORD:-}
-      TENANTS_SECRET: ${TENANTS_SECRET:-}
-      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET zorunlu}
-      RELEASE_SECRET: ${RELEASE_SECRET:-}
-      EDUCATION_URL: ${EDUCATION_URL:-http://127.0.0.1:3052/education}
-      SALON_URL: ${SALON_URL:-http://127.0.0.1:3054/salon}
-      EDUCATION_ROOT_URL: ${EDUCATION_ROOT_URL:-http://127.0.0.1:3053}
-      SALON_ROOT_URL: ${SALON_ROOT_URL:-http://127.0.0.1:3055}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-suaterenler@gmail.com}
-      PUBLIC_URL: ${PUBLIC_URL:-https://app.erenleryazilim.com}
-      MAIL_FROM: ${MAIL_FROM:-Erenler Yönetim <noreply@erenleryazilim.com>}
-      SMTP_HOST: ${SMTP_HOST:-127.0.0.1}
-      SMTP_PORT: ${SMTP_PORT:-25}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      DATA_DIR: /app/data
-      TRUST_PROXY: "1"
-      NODE_ENV: production
+      <<: *app-env
+      PORT: "3061"
+
+  app-green:
+    <<: *app
+    container_name: tenants-app-green
+    environment:
+      <<: *app-env
+      PORT: "3062"
 
   edge:
     image: ${APP_IMAGE:-ghcr.io/suaterenler/tenants:latest}
@@ -76,7 +112,7 @@ services:
     network_mode: host
     command: ["node", "edge/server.mjs"]
     depends_on:
-      - app
+      - gate
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${EDGE_PORT}/__edge/health"]
       interval: 15s

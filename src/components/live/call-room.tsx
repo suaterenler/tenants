@@ -390,6 +390,16 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }, []);
 
   useEffect(() => {
+    if (window.parent !== window) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, []);
+
+  useEffect(() => {
     client.onIncoming = (message) => {
       setPanel((current) => {
         if (current !== "chat") {
@@ -701,7 +711,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
           <QualityChip quality={quality} />
         </div>
 
-        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-center gap-1.5 border-t border-white/10 bg-neutral-900/95 px-2 py-2 sm:static sm:mx-auto sm:border-0 sm:bg-transparent sm:p-0 xl:absolute xl:inset-x-auto xl:top-1/2 xl:bottom-auto xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:-translate-y-1/2">
+        <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-center gap-1.5 max-[380px]:gap-1 border-t border-white/10 bg-neutral-900/95 px-2 py-2 sm:static sm:mx-auto sm:border-0 sm:bg-transparent sm:p-0 xl:absolute xl:inset-x-auto xl:top-1/2 xl:bottom-auto xl:left-1/2 xl:mx-0 xl:-translate-x-1/2 xl:-translate-y-1/2">
           <DeviceButton
             on={micOn}
             onToggle={toggleMic}
@@ -889,14 +899,14 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
               </div>
             </PopoverContent>
           </Popover>
-          <span className="mx-1 h-7 w-px bg-white/10" />
+          <span className="mx-1 h-7 w-px bg-white/10 max-[380px]:hidden" />
           {role === "host" ? (
             <Button className="h-10 gap-2 rounded-full bg-red-600 px-4 text-white hover:bg-red-700" onClick={() => setConfirm({ message: t.endConfirm, label: t.end, action: endForAll })} title={t.end}>
               <PhoneOff className="size-5" />
               <span className="hidden md:inline">{t.end}</span>
             </Button>
           ) : (
-            <Button className="h-10 gap-2 rounded-full bg-red-600 px-4 text-white hover:bg-red-700" onClick={finish} title={t.leave}>
+            <Button className="h-10 gap-2 rounded-full bg-red-600 px-4 text-white hover:bg-red-700" onClick={() => setConfirm({ message: t.leaveConfirm, label: t.leave, action: finish })} title={t.leave}>
               <PhoneOff className="size-5" />
               <span className="hidden md:inline">{t.leave}</span>
             </Button>
@@ -1285,7 +1295,7 @@ function DeviceButton({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <button type="button" title={menuLabel} aria-label={menuLabel} className="inline-flex h-10 w-6 items-center justify-center rounded-r-full text-white/80 hover:bg-white/10">
+            <button type="button" title={menuLabel} aria-label={menuLabel} className="inline-flex h-10 w-6 items-center justify-center rounded-r-full text-white/80 hover:bg-white/10 max-[380px]:hidden">
               <ChevronUp className="size-3.5" />
             </button>
           }
@@ -1351,7 +1361,7 @@ function SelfTile({
   const speaking = micOn && level > 0.15;
   return (
     <div className={cn("relative size-full overflow-hidden rounded-xl bg-neutral-800 ring-2 transition-shadow", speaking ? "ring-emerald-400" : "ring-white/5")}>
-      <video ref={videoRef} autoPlay muted playsInline className={cn("size-full -scale-x-100 object-cover", camOn ? "" : "invisible")} />
+      <video ref={videoRef} autoPlay muted playsInline className={cn("size-full object-cover", camOn ? "" : "invisible")} />
       {!camOn ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-neutral-800 to-neutral-900 p-3 text-center">
           <span className={cn("flex items-center justify-center rounded-full bg-sky-700 font-semibold text-white", small ? "size-10 text-sm" : "size-20 text-2xl")}>{initials(name)}</span>

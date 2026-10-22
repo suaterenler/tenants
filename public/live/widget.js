@@ -16,6 +16,7 @@
       close: "Kapat",
       prepTitle: "Görüşmeye hazırlanın",
       nameLabel: "Adınız",
+      phoneOpt: "Telefon",
       namePh: "Adınız Soyadınız",
       preview: "Kamera önizleme",
       camOff: "Kamera kapalı",
@@ -43,7 +44,7 @@
       timeoutText: "Talebiniz alındı. Kısa sürede yanıt verebilirsek bağlantıyı biz kuracağız; uzun sürerse size telefonla bilgi verilecek.",
       name: "Ad Soyad",
       phone: "Telefon",
-      phoneHint: "0 5xx xxx xx xx",
+      phoneHint: "5xx xxx xx xx",
       email: "E-posta (isteğe bağlı)",
       note: "Kısa not (isteğe bağlı)",
       notePh: "Hangi ürünle ilgileniyorsunuz?",
@@ -59,11 +60,14 @@
       minimize: "Küçült",
       maximize: "Büyüt",
       endCall: "Görüşmeyi kapat",
+      endConfirm: "Görüşmeden çıkmak istediğinize emin misiniz?",
+      endYes: "Çık",
+      endNo: "Vazgeç",
       unavailableErr: "Şu an canlı görüşme yapılamıyor. Talebinizi bırakın, sizi arayalım.",
       busyErr: "Şu an başka bir görüşmedeyiz. Talebinizi bırakın, görüşme biter bitmez sizi arayalım.",
-      subBusy: "Şu an başka bir görüşme yapılıyor, bekleyebilir veya not bırakabilirsiniz.",
-      waitBtn: "Bekle",
-      noteBtn: "Not bırak",
+      subBusy: "Şu an başka bir görüşme yapılıyor. Talep bırakabilir ya da sırada bekleyebilirsiniz.",
+      queueBtn: "Sırada beklemek istiyorum",
+      busyTitle: "Şu an başka bir görüşme yapılıyor",
       queueTitle: "Şu an başka bir görüşme yapılıyor. Sıradasınız, görüşme biter bitmez bağlanacağız.",
       queueNote: "Beklemeden not bırak",
       stateBusy: "Şu an görüşmede",
@@ -84,7 +88,8 @@
       openLive: "Open live call",
       close: "Close",
       prepTitle: "Get ready for the call",
-      nameLabel: "Your name (optional)",
+      nameLabel: "Your name",
+      phoneOpt: "Phone",
       namePh: "Your full name",
       preview: "Camera preview",
       camOff: "Camera off",
@@ -112,7 +117,7 @@
       timeoutText: "Your request was received. If we can respond soon we will connect you; if it takes longer we will inform you by phone.",
       name: "Full name",
       phone: "Phone",
-      phoneHint: "0 5xx xxx xx xx",
+      phoneHint: "5xx xxx xx xx",
       email: "Email (optional)",
       note: "Short note (optional)",
       notePh: "Which product are you interested in?",
@@ -128,11 +133,14 @@
       minimize: "Minimize",
       maximize: "Maximize",
       endCall: "End call",
+      endConfirm: "Are you sure you want to leave the call?",
+      endYes: "Leave",
+      endNo: "Cancel",
       unavailableErr: "A live call is not available right now. Leave your request and we will call you.",
       busyErr: "We are in another call right now. Leave your request and we will call you as soon as it ends.",
-      subBusy: "Another call is in progress. You can wait or leave a note.",
-      waitBtn: "Wait",
-      noteBtn: "Leave a note",
+      subBusy: "Another call is in progress. Leave a request or wait in the queue.",
+      queueBtn: "I want to wait in the queue",
+      busyTitle: "Another call is in progress",
       queueTitle: "Another call is in progress. You are in the queue; we will connect as soon as it ends.",
       queueNote: "Leave a note instead",
       stateBusy: "In a call right now",
@@ -161,7 +169,8 @@
 
   const CSS = `
 :host{--navy:#0b1a36;--blue:#2f7bff;--sky:#5fd4ff;--bg:#ffffff;--fg:#0b1a36;--muted:#5b6b85;--line:#e1e8f5;--surface:#f4f7fd;--shadow:0 24px 60px rgba(11,26,54,.25);--danger:#c62828;--ok:#15803d;--warn:#b45309;color-scheme:light}
-@media (prefers-color-scheme: dark){:host{--bg:#0f2143;--fg:#e8eefb;--muted:#9fb0cc;--line:#263d66;--surface:#132a52;--shadow:0 24px 60px rgba(0,0,0,.55);--danger:#f87171;--ok:#4ade80;--warn:#fbbf24;color-scheme:dark}}
+:host(.ew-dark){--bg:#0f2143;--fg:#e8eefb;--muted:#9fb0cc;--line:#263d66;--surface:#132a52;--shadow:0 24px 60px rgba(0,0,0,.55);--danger:#f87171;--ok:#4ade80;--warn:#fbbf24;color-scheme:dark}
+@media (prefers-color-scheme: dark){:host(:not(.ew-light)){--bg:#0f2143;--fg:#e8eefb;--muted:#9fb0cc;--line:#263d66;--surface:#132a52;--shadow:0 24px 60px rgba(0,0,0,.55);--danger:#f87171;--ok:#4ade80;--warn:#fbbf24;color-scheme:dark}}
 .w{font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-size:15px;line-height:1.45;color:var(--fg)}
 *,*::before,*::after{box-sizing:border-box}
 button,input,textarea{font:inherit;color:inherit}
@@ -175,8 +184,8 @@ button{cursor:pointer}
 .dot.on{background:#22c55e;animation:pulse 1.8s ease-out infinite}
 .dot.off{background:#8b97ad}
 .dot.busy{background:#f59e0b}
-.cta.alt{background:transparent;color:inherit;box-shadow:none;border:1px solid currentColor;opacity:.9}
-@media (max-width:640px){.cta.alt{display:none}}
+
+
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.65)}70%{box-shadow:0 0 0 9px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
 .btext{flex:1;min-width:0}
 .btitle{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -189,7 +198,7 @@ button{cursor:pointer}
 .fab:hover{transform:translateY(-2px)}
 .layer{position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;padding:20px}
 .backdrop{position:absolute;inset:0;background:rgba(5,11,24,.62);backdrop-filter:blur(4px)}
-.dialog{position:relative;width:min(460px,100%);min-height:540px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
+.dialog{position:relative;width:min(540px,100%);min-height:540px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);overflow:hidden}
 .dhead{display:flex;align-items:center;gap:12px;padding:18px 18px 8px 20px}
 .badge{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#2f7bff,#5fd4ff);flex:none}
 .dtitle{flex:1;margin:0;font-size:17px;font-weight:700;min-width:0}
@@ -199,13 +208,15 @@ button{cursor:pointer}
 .lead{margin:0;color:var(--muted)}
 .flabel{display:flex;flex-direction:column;gap:6px;font-size:13.5px;font-weight:600}
 .field{display:flex;flex-direction:column;gap:4px}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+@media (max-width:640px){.pair{grid-template-columns:minmax(0,1fr)}}
 input,textarea{width:100%;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--fg);outline:none;font-weight:400}
 input:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(47,123,255,.25)}
 input[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--danger)}
 textarea{resize:vertical;min-height:80px}
 .ferr{min-height:18px;font-size:12.5px;color:var(--danger)}
 .preview{position:relative;aspect-ratio:16/10;border-radius:16px;overflow:hidden;background:radial-gradient(circle at 30% 20%,#23509a,#0b1a36 70%)}
-.preview video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:block}
+.preview video{width:100%;height:100%;object-fit:cover;display:block}
 .preview .off{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#cfe0ff;font-size:14px}
 .preview .off .ico svg{width:34px;height:34px}
 .preview.nocam .off{display:flex}
@@ -225,7 +236,7 @@ textarea{resize:vertical;min-height:80px}
 .privacy{margin:0;display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted)}
 .privacy .ico{color:var(--blue);margin-top:1px}
 .btn{width:100%;border:0;border-radius:14px;padding:13px 16px;font-size:15px;font-weight:650}
-.btn.primary{color:var(--ew-cta-fg,#fff);background:var(--ew-cta,linear-gradient(135deg,#2f7bff,#4fb8ff));box-shadow:0 10px 24px rgba(47,123,255,.32)}
+.btn.primary{color:var(--ew-primary-fg,#fff);background:var(--ew-primary,linear-gradient(135deg,#2f7bff,#4fb8ff));box-shadow:0 10px 24px rgba(47,123,255,.32)}
 .btn.primary:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
 .btn.end{margin-top:auto}
@@ -248,8 +259,21 @@ textarea{resize:vertical;min-height:80px}
 .call .ttl{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .call .icon-btn{color:#fff}
 .call iframe{flex:1;width:100%;min-height:0;border:0;background:#000}
-.call.mini{inset:auto;right:16px;bottom:16px;width:min(340px,calc(100vw - 32px));height:230px;border-radius:16px;overflow:hidden;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.14)}
+.call.mini{inset:auto;right:16px;bottom:16px;width:min(260px,calc(100vw - 32px));height:min(520px,calc(100vh - 32px));border-radius:16px;overflow:hidden;box-shadow:var(--shadow);border:1px solid rgba(255,255,255,.14)}
 .call.mini .bar{cursor:grab;touch-action:none;min-height:44px;padding:6px 8px 6px 12px;font-size:13px}
+.grip{display:none;position:absolute;z-index:3;width:18px;height:18px;touch-action:none}
+.call.mini .grip{display:block}
+.grip.nw{left:0;top:0;cursor:nwse-resize}
+.grip.se{right:0;bottom:0;cursor:nwse-resize;background:linear-gradient(135deg,transparent 0 55%,rgba(255,255,255,.75) 55% 62%,transparent 62% 72%,rgba(255,255,255,.75) 72% 79%,transparent 79%)}
+.grip.ne{right:0;top:0;cursor:nesw-resize}
+.grip.sw{left:0;bottom:0;cursor:nesw-resize}
+.call.resizing iframe,.call.dragging iframe{pointer-events:none}
+.confirm{position:absolute;inset:0;z-index:5;display:grid;place-items:center;padding:16px;background:rgba(5,10,22,.6);backdrop-filter:blur(2px)}
+.confirm-card{width:min(340px,100%);display:flex;flex-direction:column;gap:14px;padding:18px;border-radius:16px;background:var(--bg);color:var(--fg);box-shadow:var(--shadow);border:1px solid var(--line)}
+.confirm-card p{margin:0;font-weight:600;line-height:1.4}
+.confirm-actions{display:flex;gap:8px}
+.confirm-actions .btn{padding:10px 12px;font-size:14px}
+.btn.danger{color:#fff;background:#dc2626}
 @media (max-width:640px){
 .banner{padding:9px 12px;gap:10px}
 .bsub{display:none}
@@ -258,7 +282,7 @@ textarea{resize:vertical;min-height:80px}
 .fab{right:14px;bottom:14px}
 .layer{padding:0;align-items:flex-end}
 .dialog{width:100%;min-height:72vh;max-height:92vh;border-radius:22px 22px 0 0;border-bottom:0}
-.call.mini{right:8px;bottom:8px;width:calc(100vw - 16px);height:200px}
+.call.mini{right:8px;bottom:8px;width:min(200px,calc(100vw - 16px));height:min(360px,calc(100vh - 16px))}
 }
 @media (prefers-reduced-motion: reduce){.dot,.avatar::before,.avatar::after{animation:none}.fab{transition:none}}
 `;
@@ -270,7 +294,6 @@ textarea{resize:vertical;min-height:80px}
   const POLL_MS = 60000;
   const RETRY_MS = 2000;
   const CALL_PATH = "/admin/live/j/DEMO42";
-  const PHONE_RE = /^0 5\d{2} \d{3} \d{2} \d{2}$/;
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   let ORIGIN = window.location.origin;
@@ -295,6 +318,7 @@ textarea{resize:vertical;min-height:80px}
   let bannerOn = true;
   let refs = {};
   let drag = null;
+  let resize = null;
   const live = { known: false, available: false, busy: false, visibility: "always", appearance: null, key: "" };
   let hostEl = null;
   const net = { ctl: null };
@@ -303,7 +327,7 @@ textarea{resize:vertical;min-height:80px}
     return {
       step: "closed", variant: "", opener: null, name: "", answer: "timeout",
       elapsed: 0, mediaError: "", audioOnly: false, camOn: true, micOn: true, timers: [],
-      error: "", id: null, token: "", queued: false
+      error: "", id: null, token: "", queued: false, phone: ""
     };
   }
   let st = fresh();
@@ -329,25 +353,63 @@ textarea{resize:vertical;min-height:80px}
     return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#0b1a36" : "#ffffff";
   }
 
+  function siteDark() {
+    var html = document.documentElement;
+    var theme = (html.getAttribute("data-theme") || "").toLowerCase();
+    if (html.classList.contains("dark") || theme === "dark") return true;
+    if (html.classList.contains("light") || theme === "light") return false;
+    if (cssVar("--brand-gradient") || cssVar("--primary")) return false;
+    return window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : false;
+  }
+
+  function cssVar(name) {
+    return window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function pickColor(dark, attrLight, attrDark, keyLight, keyDark) {
+    var data = SCRIPT ? SCRIPT.dataset : {};
+    var valid = function (value) { return value === "auto" || /^#[0-9a-f]{6}$/i.test(value || ""); };
+    var appearance = live.appearance || {};
+    if (dark && valid(data[attrDark])) return data[attrDark];
+    if (dark && valid(appearance[keyDark]) && !valid(data[attrLight])) return appearance[keyDark];
+    if (valid(data[attrLight])) return data[attrLight];
+    return valid(appearance[keyLight]) ? appearance[keyLight] : "";
+  }
+
+  function setPair(name, background, foreground) {
+    if (background) {
+      hostEl.style.setProperty(name, background);
+      hostEl.style.setProperty(name + "-fg", foreground);
+    } else {
+      hostEl.style.removeProperty(name);
+      hostEl.style.removeProperty(name + "-fg");
+    }
+  }
+
   function applyColors() {
     if (!hostEl) return;
     var data = SCRIPT ? SCRIPT.dataset : {};
-    var color = /^#[0-9a-f]{6}$/i.test(data.color || "") ? data.color : live.appearance && live.appearance.color;
-    var button = /^#[0-9a-f]{6}$/i.test(data.buttonColor || "") ? data.buttonColor : live.appearance && live.appearance.buttonColor;
-    if (color) {
-      hostEl.style.setProperty("--ew-banner", color);
-      hostEl.style.setProperty("--ew-banner-fg", readable(color));
+    var dark = siteDark();
+    var color = pickColor(dark, "color", "colorDark", "color", "colorDark");
+    var button = pickColor(dark, "buttonColor", "buttonColorDark", "buttonColor", "buttonColorDark");
+    if (color === "auto") {
+      var gradient = cssVar("--brand-gradient") || cssVar("--primary");
+      setPair("--ew-banner", gradient, cssVar("--brand-on-brand") || cssVar("--primary-fg") || "#ffffff");
     } else {
-      hostEl.style.removeProperty("--ew-banner");
-      hostEl.style.removeProperty("--ew-banner-fg");
+      setPair("--ew-banner", color, color ? readable(color) : "");
     }
-    if (button) {
-      hostEl.style.setProperty("--ew-cta", button);
-      hostEl.style.setProperty("--ew-cta-fg", readable(button));
+    if (button === "auto") {
+      var buttonBg = cssVar("--brand-btn-bg") || cssVar("--primary");
+      setPair("--ew-cta", buttonBg, cssVar("--brand-btn-fg") || cssVar("--primary-fg") || "#ffffff");
+      setPair("--ew-primary", cssVar("--primary"), cssVar("--primary-fg") || "#ffffff");
     } else {
-      hostEl.style.removeProperty("--ew-cta");
-      hostEl.style.removeProperty("--ew-cta-fg");
+      setPair("--ew-cta", button, button ? readable(button) : "");
+      setPair("--ew-primary", button, button ? readable(button) : "");
     }
+    var theme = data.theme === "light" || data.theme === "dark" || data.theme === "auto" ? data.theme : live.appearance && live.appearance.theme;
+    var darkWindows = theme === "dark" || (theme !== "light" && dark);
+    hostEl.classList.toggle("ew-dark", darkWindows);
+    hostEl.classList.toggle("ew-light", !darkWindows);
   }
 
   function suppressed() {
@@ -396,13 +458,25 @@ textarea{resize:vertical;min-height:80px}
     return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
   }
 
-  function maskPhone(v) {
-    let d = v.replace(/\D/g, "").slice(0, 11);
-    if (d.length && d.charAt(0) !== "0") d = ("0" + d).slice(0, 11);
-    return [d.slice(0, 1), d.slice(1, 4), d.slice(4, 7), d.slice(7, 9), d.slice(9, 11)].filter(Boolean).join(" ");
+  function groupPhone(r) {
+    return [r.slice(0, 3), r.slice(3, 6), r.slice(6, 8), r.slice(8, 10)].filter(Boolean).join(" ");
   }
 
-  function isPhone(v) { return PHONE_RE.test(v); }
+  function maskPhone(v) {
+    const d = v.replace(/\D/g, "");
+    if (v.trim().charAt(0) === "+") {
+      if (d.indexOf("90") === 0) return "+90" + (d.length > 2 ? " " + groupPhone(d.slice(2, 12)) : "");
+      return "+" + d.slice(0, 15);
+    }
+    if (d.charAt(0) === "0") return "0" + (d.length > 1 ? " " + groupPhone(d.slice(1, 11)) : "");
+    return groupPhone(d.slice(0, 10));
+  }
+
+  function isPhone(v) {
+    const d = v.replace(/\D/g, "");
+    if (v.trim().charAt(0) === "+") return d.indexOf("90") === 0 ? /^90[2-5]\d{9}$/.test(d) : d.length >= 8 && d.length <= 15;
+    return /^[2-5]\d{9}$/.test(d.charAt(0) === "0" ? d.slice(1) : d);
+  }
   function isEmail(v) { return EMAIL_RE.test(v); }
 
   function later(fn, ms) { st.timers.push(setTimeout(fn, ms)); }
@@ -491,6 +565,9 @@ textarea{resize:vertical;min-height:80px}
       stream.getVideoTracks().forEach(function (tr) { tr.enabled = st.camOn; });
       stream.getAudioTracks().forEach(function (tr) { tr.enabled = st.micOn; });
       if (refs.video) {
+        refs.video.muted = true;
+        refs.video.defaultMuted = true;
+        refs.video.volume = 0;
         refs.video.srcObject = stream;
         refs.video.play().catch(function () {});
       }
@@ -557,6 +634,8 @@ textarea{resize:vertical;min-height:80px}
 
   function buildPrepare() {
     const video = el("video", { autoplay: true, muted: true, playsinline: true });
+    video.muted = true;
+    video.defaultMuted = true;
     const preview = el("div", { class: "preview", role: "img", "aria-label": t.preview }, [
       video,
       el("div", { class: "off" }, [icon("videoOff"), el("span", { text: t.camOff })])
@@ -568,8 +647,9 @@ textarea{resize:vertical;min-height:80px}
     refs.meter = el("i");
     refs.warn = el("div", { class: "warn-slot", "aria-live": "polite" });
     const nameField = makeField({ key: "name", label: t.nameLabel, auto: "name", ph: t.namePh, value: st.name, onType: setName, required: true });
-    return el("form", { class: "step", novalidate: true, on: { submit: function (e) { e.preventDefault(); if (validateAll([nameField])) go("waiting"); } } }, [
-      nameField.wrap,
+    const phoneField = makeField({ key: "phone", label: t.phoneOpt, type: "tel", auto: "tel", ph: t.phoneHint, value: st.phone, onType: function (v) { st.phone = v; }, mask: maskPhone, check: isPhone, msg: t.badPhone });
+    return el("form", { class: "step", novalidate: true, on: { submit: function (e) { e.preventDefault(); if (validateAll([nameField, phoneField])) go("waiting"); } } }, [
+      el("div", { class: "pair" }, [nameField.wrap, phoneField.wrap]),
       preview,
       el("div", { class: "controls" }, [
         refs.camBtn,
@@ -648,7 +728,7 @@ textarea{resize:vertical;min-height:80px}
   function buildOffline() {
     const fields = [
       makeField({ key: "name", label: t.name, auto: "name", required: true, value: st.name, onType: setName }),
-      makeField({ key: "phone", label: t.phone, type: "tel", auto: "tel", ph: t.phoneHint, required: true, mask: maskPhone, check: isPhone, msg: t.badPhone }),
+      makeField({ key: "phone", label: t.phone, type: "tel", auto: "tel", ph: t.phoneHint, value: st.phone, onType: function (v) { st.phone = v; }, required: true, mask: maskPhone, check: isPhone, msg: t.badPhone }),
       makeField({ key: "email", label: t.email, type: "email", auto: "email", check: isEmail, msg: t.badEmail }),
       makeField({ key: "note", label: t.note, multi: true, ph: t.notePh })
     ];
@@ -662,16 +742,37 @@ textarea{resize:vertical;min-height:80px}
           if (validateAll(fields)) submitCallback(fields);
         }
       }
-    }, fields.map(function (f) { return f.wrap; }).concat([
+    }, [
+      fields[0].wrap,
+      el("div", { class: "pair" }, [fields[1].wrap, fields[2].wrap]),
+      fields[3].wrap,
       formSlot(),
-      submitButton(t.sendRequest)
-    ]));
+      submitButton(t.sendRequest),
+      busyNow() ? el("button", {
+        type: "button",
+        class: "btn ghost",
+        text: t.queueBtn,
+        on: {
+          click: function () {
+            const phone = fields[1];
+            fields[1].required = false;
+            const ok = validateAll(phone.input.value.trim() ? [fields[0], phone] : [fields[0]]);
+            fields[1].required = true;
+            if (ok) go("prepare");
+          }
+        }
+      }) : ""
+    ]);
+  }
+
+  function busyNow() {
+    return !DEMO && live.available && live.busy;
   }
 
   function buildPhone() {
     const fields = [
       makeField({ key: "name", label: t.name, auto: "name", value: st.name, onType: setName }),
-      makeField({ key: "phone", label: t.phone, type: "tel", auto: "tel", ph: t.phoneHint, required: true, mask: maskPhone, check: isPhone, msg: t.badPhone })
+      makeField({ key: "phone", label: t.phone, type: "tel", auto: "tel", ph: t.phoneHint, value: st.phone, required: true, mask: maskPhone, check: isPhone, msg: t.badPhone })
     ];
     refs.fields = fields;
     const intro = el("p", { class: "lead", text: st.variant === "reject" ? t.rejectText : t.timeoutText });
@@ -701,7 +802,7 @@ textarea{resize:vertical;min-height:80px}
     switch (st.step) {
       case "prepare": return t.prepTitle;
       case "waiting": return t.waitHead;
-      case "offline": return t.offTitle;
+      case "offline": return busyNow() ? t.busyTitle : t.offTitle;
       case "phone": return st.variant === "reject" ? t.rejectTitle : t.timeoutTitle;
       case "thanks": return t.thanksTitle;
       default: return "";
@@ -729,18 +830,45 @@ textarea{resize:vertical;min-height:80px}
     focusFirst();
   }
 
+  var CALL_KEY = "erenler_live_call";
+  var RESUME_MS = 5 * 60 * 1000;
+
+  function saveCall(url) {
+    if (DEMO) return;
+    try {
+      if (url) window.sessionStorage.setItem(CALL_KEY, JSON.stringify({ url: url, mini: callEl.classList.contains("mini"), at: Date.now() }));
+      else window.sessionStorage.removeItem(CALL_KEY);
+    } catch {
+      return;
+    }
+  }
+
+  function savedCall() {
+    try {
+      var saved = JSON.parse(window.sessionStorage.getItem(CALL_KEY) || "null");
+      if (saved && typeof saved.url === "string" && saved.url.indexOf(ORIGIN + "/admin/live/j/") === 0 && Date.now() - saved.at < RESUME_MS) return saved;
+    } catch {
+      return null;
+    }
+    saveCall(null);
+    return null;
+  }
+
   function startCall(url) {
     stopMedia();
     st.step = "call";
+    st.callUrl = url;
     layer.hidden = true;
     callEl.hidden = false;
     callEl.classList.remove("mini");
     frame.src = url;
+    saveCall(url);
     syncCallToggle();
     syncFab();
   }
 
   function endCall() {
+    saveCall(null);
     frame.src = "about:blank";
     callEl.hidden = true;
     callEl.classList.remove("mini");
@@ -748,6 +876,8 @@ textarea{resize:vertical;min-height:80px}
     callEl.style.top = "";
     callEl.style.right = "";
     callEl.style.bottom = "";
+    callEl.style.width = "";
+    callEl.style.height = "";
     st = fresh();
     syncFab();
   }
@@ -759,19 +889,39 @@ textarea{resize:vertical;min-height:80px}
       window.clearTimeout(closeTimer);
       endCall();
     } else if (event.data.type === "erenler-live:ended") {
+      saveCall(null);
       window.clearTimeout(closeTimer);
       closeTimer = window.setTimeout(endCall, 5000);
     }
   });
 
+  function askEndCall() {
+    if (!callEl || callEl.querySelector(".confirm")) return;
+    const box = el("div", { class: "confirm", role: "alertdialog", "aria-label": t.endConfirm }, [
+      el("div", { class: "confirm-card" }, [
+        el("p", { text: t.endConfirm }),
+        el("div", { class: "confirm-actions" }, [
+          el("button", { type: "button", class: "btn ghost", text: t.endNo, on: { click: function () { box.remove(); } } }),
+          el("button", { type: "button", class: "btn danger", text: t.endYes, on: { click: function () { box.remove(); endCall(); } } })
+        ])
+      ])
+    ]);
+    callEl.appendChild(box);
+    const first = box.querySelector("button");
+    if (first) first.focus();
+  }
+
   function toggleMini() {
     const mini = !callEl.classList.contains("mini");
     callEl.classList.toggle("mini", mini);
+    if (st.callUrl) saveCall(st.callUrl);
     if (!mini) {
       callEl.style.left = "";
       callEl.style.top = "";
       callEl.style.right = "";
       callEl.style.bottom = "";
+      callEl.style.width = "";
+      callEl.style.height = "";
     }
     syncCallToggle();
   }
@@ -891,12 +1041,36 @@ textarea{resize:vertical;min-height:80px}
     });
   }
 
+  var PENDING_KEY = "erenler_live_pending";
+
+  function rememberPending(id, token) {
+    try {
+      if (id) window.sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: id, token: token }));
+      else window.sessionStorage.removeItem(PENDING_KEY);
+    } catch {
+      return;
+    }
+  }
+
+  function cancelRemembered() {
+    var saved = null;
+    try {
+      saved = JSON.parse(window.sessionStorage.getItem(PENDING_KEY) || "null");
+    } catch {
+      saved = null;
+    }
+    rememberPending(null, "");
+    if (!saved || !saved.id || !saved.token) return;
+    fetch(ORIGIN + "/admin/api/live/public/requests/" + saved.id, { method: "DELETE", headers: { "X-Live-Token": saved.token }, keepalive: true }).catch(function () {});
+  }
+
   function dropWaiting() {
     const id = st.id;
     const token = st.token;
     abortLive();
     st.id = null;
     st.token = "";
+    rememberPending(null, "");
     if (id) {
       fetch(ORIGIN + "/admin/api/live/public/requests/" + id, {
         method: "DELETE",
@@ -929,6 +1103,7 @@ textarea{resize:vertical;min-height:80px}
     if (name === "accepted" && data.code) {
       abortLive();
       clearTimers();
+      rememberPending(null, "");
       startCall(ORIGIN + "/admin/live/j/" + encodeURIComponent(data.code) + "?lang=" + LANG + "#t=" + encodeURIComponent(token));
     } else if (name === "rejected" || name === "missed") {
       abortLive();
@@ -1005,13 +1180,15 @@ textarea{resize:vertical;min-height:80px}
   function startRequest() {
     const ctl = new AbortController();
     net.ctl = ctl;
-    postJson("/requests", { mode: "call", name: st.name.trim(), page: location.pathname }, ctl.signal, "").then(function (res) {
+    cancelRemembered();
+    postJson("/requests", { mode: "call", name: st.name.trim(), phone: st.phone.trim(), page: location.pathname }, ctl.signal, "").then(function (res) {
       if (ctl.signal.aborted) return;
       if (res.status !== 201) return failOf(res).then(requestFailed);
       return res.json().then(function (j) {
         if (ctl.signal.aborted || st.step !== "waiting") return;
         st.id = j.id;
         st.token = j.token;
+        rememberPending(j.id, j.token);
         listen(ctl);
       });
     }).catch(function () {
@@ -1152,10 +1329,9 @@ textarea{resize:vertical;min-height:80px}
     const cta = el("button", {
       type: "button",
       class: "cta",
-      text: busy ? t.waitBtn : c.available ? label("startNow") : label("requestCall"),
-      on: { click: function () { openModal(c.available ? "prepare" : "offline", cta); } }
+      text: busy ? label("requestCall") : c.available ? label("startNow") : label("requestCall"),
+      on: { click: function () { openModal(c.available && !busy ? "prepare" : "offline", cta); } }
     });
-    const note = busy ? el("button", { type: "button", class: "cta alt", text: t.noteBtn, on: { click: function () { openModal("offline", note); } } }) : null;
     banner.textContent = "";
     banner.hidden = !bannerOn || suppressed();
     banner.setAttribute("aria-label", label("title"));
@@ -1165,7 +1341,6 @@ textarea{resize:vertical;min-height:80px}
         el("div", { class: "btitle", text: label("title") }),
         el("div", { class: "bsub", text: busy ? t.subBusy : c.available ? label("subOn") : label("subOff") })
       ]),
-      note || "",
       cta
     );
     syncPadding();
@@ -1193,15 +1368,63 @@ textarea{resize:vertical;min-height:80px}
       el("span", { class: "live-dot", "aria-hidden": "true" }),
       el("span", { class: "ttl", text: t.callTitle }),
       callToggle,
-      el("button", { type: "button", class: "icon-btn", title: t.endCall, "aria-label": t.endCall, on: { click: endCall } }, [icon("x")])
+      el("button", { type: "button", class: "icon-btn", title: t.endCall, "aria-label": t.endCall, on: { click: askEndCall } }, [icon("x")])
     ]);
     frame = el("iframe", { title: t.callTitle, allow: "camera; microphone; display-capture; autoplay; fullscreen" });
-    callEl = el("div", { class: "call", hidden: true }, [callBar, frame]);
+    const grips = ["nw", "ne", "sw", "se"].map(function (corner) {
+      const grip = el("span", { class: "grip " + corner, "aria-hidden": "true" });
+      grip.addEventListener("pointerdown", function (e) {
+        if (!callEl.classList.contains("mini")) return;
+        e.preventDefault();
+        const r = callEl.getBoundingClientRect();
+        callEl.style.left = r.left + "px";
+        callEl.style.top = r.top + "px";
+        callEl.style.right = "auto";
+        callEl.style.bottom = "auto";
+        resize = { corner: corner, x: e.clientX, y: e.clientY, left: r.left, top: r.top, width: r.width, height: r.height };
+        callEl.classList.add("resizing");
+        grip.setPointerCapture(e.pointerId);
+      });
+      grip.addEventListener("pointermove", function (e) {
+        if (!resize) return;
+        const minW = 260;
+        const minH = 180;
+        const dx = e.clientX - resize.x;
+        const dy = e.clientY - resize.y;
+        let left = resize.left;
+        let top = resize.top;
+        let width = resize.width;
+        let height = resize.height;
+        if (resize.corner.indexOf("e") >= 0) width = Math.min(window.innerWidth - left - 8, Math.max(minW, resize.width + dx));
+        if (resize.corner.indexOf("w") >= 0) {
+          width = Math.min(resize.left + resize.width - 8, Math.max(minW, resize.width - dx));
+          left = resize.left + resize.width - width;
+        }
+        if (resize.corner.indexOf("s") >= 0) height = Math.min(window.innerHeight - top - 8, Math.max(minH, resize.height + dy));
+        if (resize.corner.indexOf("n") >= 0) {
+          height = Math.min(resize.top + resize.height - 8, Math.max(minH, resize.height - dy));
+          top = resize.top + resize.height - height;
+        }
+        callEl.style.left = left + "px";
+        callEl.style.top = top + "px";
+        callEl.style.width = width + "px";
+        callEl.style.height = height + "px";
+      });
+      const stop = function () {
+        resize = null;
+        callEl.classList.remove("resizing");
+      };
+      grip.addEventListener("pointerup", stop);
+      grip.addEventListener("pointercancel", stop);
+      return grip;
+    });
+    callEl = el("div", { class: "call", hidden: true }, [callBar, frame].concat(grips));
 
     callBar.addEventListener("pointerdown", function (e) {
       if (!callEl.classList.contains("mini") || e.target.closest("button")) return;
       const r = callEl.getBoundingClientRect();
       drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, id: e.pointerId };
+      callEl.classList.add("dragging");
       callBar.setPointerCapture(e.pointerId);
     });
     callBar.addEventListener("pointermove", function (e) {
@@ -1213,7 +1436,10 @@ textarea{resize:vertical;min-height:80px}
       callEl.style.right = "auto";
       callEl.style.bottom = "auto";
     });
-    const stopDrag = function () { drag = null; };
+    const stopDrag = function () {
+      drag = null;
+      callEl.classList.remove("dragging");
+    };
     callBar.addEventListener("pointerup", stopDrag);
     callBar.addEventListener("pointercancel", stopDrag);
 
@@ -1263,6 +1489,24 @@ textarea{resize:vertical;min-height:80px}
     applyColors();
     renderBanner();
     syncFab();
+    var resume = savedCall();
+    if (resume) {
+      startCall(resume.url);
+      if (resume.mini) toggleMini();
+    }
+    window.addEventListener("pagehide", function () {
+      if (st.step === "call" && st.callUrl) saveCall(st.callUrl);
+    });
+    window.addEventListener("beforeunload", function (event) {
+      if (st.step !== "call") return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+    if (window.MutationObserver) new MutationObserver(applyColors).observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme", "style"] });
+    if (window.matchMedia) {
+      var scheme = window.matchMedia("(prefers-color-scheme: dark)");
+      if (scheme.addEventListener) scheme.addEventListener("change", applyColors);
+    }
     if (!DEMO) {
       refreshStatus();
       setInterval(function () { if (document.visibilityState === "visible") refreshStatus(); }, POLL_MS);

@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BASE_PATH } from "@/lib/admin-client";
 import { formatDateTime } from "@/lib/format";
-import { durationMinutes, initials, previousSessions, type LiveSession, type LiveSessionPatch, type LiveStatus } from "@/lib/live";
+import { durationMinutes, formatPhone, initials, isValidPhone, type LiveSession, type LiveSessionPatch, type LiveStatus, previousSessions } from "@/lib/live";
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<LiveStatus, string> = {
@@ -82,6 +82,7 @@ export function LiveSessionDialog({
   }
 
   const current = session && draft ? draft : null;
+  const phoneBad = Boolean(current?.phone.trim()) && !isValidPhone(current?.phone ?? "");
   const dirty = session && current ? JSON.stringify(draftOf(session)) !== JSON.stringify(current) : false;
   const previous = session ? previousSessions(sessions, session) : [];
   const minutes = session ? durationMinutes(session) : null;
@@ -143,10 +144,10 @@ export function LiveSessionDialog({
                 <Field label={t.live.name} htmlFor="live-name" required hint={current.name.trim() ? undefined : t.errors.liveNameRequired}>
                   <Input id="live-name" value={current.name} aria-invalid={current.name.trim() ? undefined : true} onChange={(event) => set("name", event.target.value)} />
                 </Field>
-                <Field label={t.live.phone} htmlFor="live-phone">
+                <Field label={t.live.phone} htmlFor="live-phone" hint={phoneBad ? t.live.badPhone : undefined}>
                   <div className="relative">
                     <Phone className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input id="live-phone" className="pl-8" value={current.phone} onChange={(event) => set("phone", event.target.value)} />
+                    <Input id="live-phone" className="pl-8" placeholder="5xx xxx xx xx" inputMode="tel" aria-invalid={phoneBad || undefined} value={current.phone} onChange={(event) => set("phone", formatPhone(event.target.value))} />
                   </div>
                 </Field>
                 <div className="sm:col-span-2">
@@ -294,7 +295,7 @@ export function LiveSessionDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               {t.common.close}
             </Button>
-            <Button type="button" onClick={save} disabled={!dirty || !current?.name.trim()}>
+            <Button type="button" onClick={save} disabled={!dirty || !current?.name.trim() || phoneBad}>
               {t.common.save}
             </Button>
           </div>

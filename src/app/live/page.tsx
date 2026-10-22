@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { adminFetch, authHeaders, BASE_PATH, readToken, storeToken } from "@/lib/admin-client";
+import { adminFetch, authHeaders, BASE_PATH, readToken, sessionExpired, storeToken } from "@/lib/admin-client";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { durationMinutes, emptyAppearance, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -293,6 +293,10 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
           cache: "no-store",
           signal: controller.signal,
         });
+        if (response.status === 401) {
+          sessionExpired();
+          return;
+        }
         if (!response.ok || !response.body) throw new Error("stream");
         if (attempt > 0) void reloadRef.current();
         attempt += 1;

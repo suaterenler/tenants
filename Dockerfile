@@ -17,6 +17,7 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/edge ./edge
+COPY --from=builder /app/deploy ./deploy
 EXPOSE 3050
 RUN mkdir -p /app/data && chown node:node /app/data
 ARG APP_COMMIT=""

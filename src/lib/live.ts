@@ -37,7 +37,11 @@ export type LiveTexts = { title: string; subOn: string; subOff: string; startNow
 
 export const LIVE_TEXT_KEYS: (keyof LiveTexts)[] = ["title", "subOn", "subOff", "startNow", "requestCall"];
 
-export type LiveAppearance = { color: string; buttonColor: string; tr: LiveTexts; en: LiveTexts };
+export type LiveTheme = "auto" | "light" | "dark";
+
+export const LIVE_THEMES: LiveTheme[] = ["auto", "light", "dark"];
+
+export type LiveAppearance = { color: string; buttonColor: string; colorDark: string; buttonColorDark: string; theme: LiveTheme; tr: LiveTexts; en: LiveTexts };
 
 export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; visibility: LiveVisibility; appearance: LiveAppearance };
 
@@ -46,11 +50,12 @@ export function emptyTexts(): LiveTexts {
 }
 
 export function emptyAppearance(): LiveAppearance {
-  return { color: "", buttonColor: "", tr: emptyTexts(), en: emptyTexts() };
+  return { color: "", buttonColor: "", colorDark: "", buttonColorDark: "", theme: "auto", tr: emptyTexts(), en: emptyTexts() };
 }
 
 export function cleanColor(value: unknown): string | null {
   if (value === "" || value === null || value === undefined) return "";
+  if (value === "auto") return "auto";
   return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
 }
 
@@ -66,8 +71,11 @@ export function parseAppearance(value: unknown): LiveAppearance | null {
   const source = value as Record<string, unknown>;
   const color = cleanColor(source.color);
   const buttonColor = cleanColor(source.buttonColor);
-  if (color === null || buttonColor === null) return null;
-  return { color, buttonColor, tr: cleanTexts(source.tr), en: cleanTexts(source.en) };
+  const colorDark = cleanColor(source.colorDark);
+  const buttonColorDark = cleanColor(source.buttonColorDark);
+  if (color === null || buttonColor === null || colorDark === null || buttonColorDark === null) return null;
+  const theme = LIVE_THEMES.includes(source.theme as LiveTheme) ? (source.theme as LiveTheme) : "auto";
+  return { color, buttonColor, colorDark, buttonColorDark, theme, tr: cleanTexts(source.tr), en: cleanTexts(source.en) };
 }
 
 export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "email" | "hostNotes" | "reminderAt" | "reminderDone" | "isNew">>;
@@ -83,6 +91,26 @@ function text(value: unknown, max: number): string {
 
 export function cleanName(value: unknown): string {
   return text(value, 60);
+}
+
+function groupPhone(rest: string): string {
+  return [rest.slice(0, 3), rest.slice(3, 6), rest.slice(6, 8), rest.slice(8, 10)].filter(Boolean).join(" ");
+}
+
+export function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "");
+  if (value.trim().startsWith("+")) {
+    if (digits.startsWith("90")) return `+90${digits.length > 2 ? ` ${groupPhone(digits.slice(2, 12))}` : ""}`;
+    return `+${digits.slice(0, 15)}`;
+  }
+  if (digits.startsWith("0")) return `0${digits.length > 1 ? ` ${groupPhone(digits.slice(1, 11))}` : ""}`;
+  return groupPhone(digits.slice(0, 10));
+}
+
+export function isValidPhone(value: string): boolean {
+  const digits = value.replace(/\D/g, "");
+  if (value.trim().startsWith("+")) return digits.startsWith("90") ? /^90[2-5]\d{9}$/.test(digits) : digits.length >= 8 && digits.length <= 15;
+  return /^[2-5]\d{9}$/.test(digits.startsWith("0") ? digits.slice(1) : digits);
 }
 
 export function cleanPhone(value: unknown): string {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanEmail, cleanName, cleanPage, cleanPhone, durationMinutes, initials, inviteCode, isInviteCode, isReminderDue, liveBadgeCount, parseSessionPatch, previousSessions, type LiveSession } from "./live";
+import { cleanEmail, cleanName, formatPhone, isValidPhone, cleanPage, cleanPhone, durationMinutes, initials, inviteCode, isInviteCode, isReminderDue, liveBadgeCount, parseSessionPatch, previousSessions, type LiveSession } from "./live";
 
 function session(overrides: Partial<LiveSession>): LiveSession {
   return {
@@ -96,5 +96,16 @@ describe("live helpers", () => {
     const code = inviteCode(() => (step++ % 10) / 10);
     expect(isInviteCode(code)).toBe(true);
     expect(isInviteCode("abc-123")).toBe(false);
+  });
+});
+
+describe("phone formatting", () => {
+  it("accepts mobile and landline numbers with or without a leading 0 or +90", () => {
+    expect(formatPhone("5321234567")).toBe("532 123 45 67");
+    expect(formatPhone("05321234567")).toBe("0 532 123 45 67");
+    expect(formatPhone("+905321234567")).toBe("+90 532 123 45 67");
+    expect(formatPhone("2161234567")).toBe("216 123 45 67");
+    for (const value of ["532 123 45 67", "0 532 123 45 67", "+90 532 123 45 67", "212 123 45 67", "0 216 123 45 67", "+4915112345678"]) expect(isValidPhone(value)).toBe(true);
+    for (const value of ["532", "123 456 78 90", "0 532 12"]) expect(isValidPhone(value)).toBe(false);
   });
 });
