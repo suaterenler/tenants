@@ -8,4 +8,7 @@ Dockerfile
 .dockerignore
 .env
 .env.*
-deploy
+deploy/*
+!deploy/gate.mjs
+!deploy/update.sh
+!deploy/docker-compose.yml
