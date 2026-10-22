@@ -29,7 +29,46 @@ export type LiveSession = {
   page: string;
 };
 
-export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string };
+export type LiveVisibility = "always" | "available" | "hidden";
+
+export const LIVE_VISIBILITIES: LiveVisibility[] = ["always", "available", "hidden"];
+
+export type LiveTexts = { title: string; subOn: string; subOff: string; startNow: string; requestCall: string };
+
+export const LIVE_TEXT_KEYS: (keyof LiveTexts)[] = ["title", "subOn", "subOff", "startNow", "requestCall"];
+
+export type LiveAppearance = { color: string; buttonColor: string; tr: LiveTexts; en: LiveTexts };
+
+export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; visibility: LiveVisibility; appearance: LiveAppearance };
+
+export function emptyTexts(): LiveTexts {
+  return { title: "", subOn: "", subOff: "", startNow: "", requestCall: "" };
+}
+
+export function emptyAppearance(): LiveAppearance {
+  return { color: "", buttonColor: "", tr: emptyTexts(), en: emptyTexts() };
+}
+
+export function cleanColor(value: unknown): string | null {
+  if (value === "" || value === null || value === undefined) return "";
+  return typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value.toLowerCase() : null;
+}
+
+function cleanTexts(value: unknown): LiveTexts {
+  const source = value !== null && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const texts = emptyTexts();
+  for (const key of LIVE_TEXT_KEYS) texts[key] = text(source[key], 160);
+  return texts;
+}
+
+export function parseAppearance(value: unknown): LiveAppearance | null {
+  if (value === null || typeof value !== "object") return null;
+  const source = value as Record<string, unknown>;
+  const color = cleanColor(source.color);
+  const buttonColor = cleanColor(source.buttonColor);
+  if (color === null || buttonColor === null) return null;
+  return { color, buttonColor, tr: cleanTexts(source.tr), en: cleanTexts(source.en) };
+}
 
 export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "email" | "hostNotes" | "reminderAt" | "reminderDone" | "isNew">>;
 

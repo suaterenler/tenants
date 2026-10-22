@@ -156,7 +156,7 @@ button{cursor:pointer}
 [hidden]{display:none !important}
 .ico{display:inline-grid;place-items:center;flex:none}
 .ico svg{display:block;width:20px;height:20px}
-.banner{position:fixed;top:0;left:0;right:0;z-index:2147483000;display:flex;align-items:center;gap:14px;padding:12px var(--ew-side-r,var(--ew-side,max(18px,calc((100% - var(--ew-max,1280px)) / 2 + var(--ew-pad,24px))))) 12px var(--ew-side,max(18px,calc((100% - var(--ew-max,1280px)) / 2 + var(--ew-pad,24px))));color:#fff;background:linear-gradient(90deg,#0b1a36 0%,#14336b 100%);box-shadow:0 8px 24px rgba(11,26,54,.28);min-width:0}
+.banner{position:fixed;top:0;left:0;right:0;z-index:2147483000;display:flex;align-items:center;gap:14px;padding:12px var(--ew-side-r,var(--ew-side,max(18px,calc((100% - var(--ew-max,1280px)) / 2 + var(--ew-pad,24px))))) 12px var(--ew-side,max(18px,calc((100% - var(--ew-max,1280px)) / 2 + var(--ew-pad,24px))));color:var(--ew-banner-fg,#fff);background:var(--ew-banner,linear-gradient(90deg,#0b1a36 0%,#14336b 100%));box-shadow:0 8px 24px rgba(11,26,54,.28);min-width:0}
 .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .dot.on{background:#22c55e;animation:pulse 1.8s ease-out infinite}
 .dot.off{background:#8b97ad}
@@ -164,11 +164,11 @@ button{cursor:pointer}
 .btext{flex:1;min-width:0}
 .btitle{font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bsub{font-size:13px;opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cta{flex:none;border:0;border-radius:999px;padding:9px 18px;font-weight:650;color:#fff;background:linear-gradient(135deg,#2f7bff,#4fb8ff);box-shadow:0 6px 18px rgba(47,123,255,.4);white-space:nowrap}
+.cta{flex:none;border:0;border-radius:999px;padding:9px 18px;font-weight:650;color:var(--ew-cta-fg,#fff);background:var(--ew-cta,linear-gradient(135deg,#2f7bff,#4fb8ff));box-shadow:0 6px 18px rgba(47,123,255,.4);white-space:nowrap}
 .cta:hover{filter:brightness(1.08)}
 .icon-btn{flex:none;width:34px;height:34px;display:grid;place-items:center;border:0;border-radius:10px;background:transparent;color:inherit;opacity:.8}
 .icon-btn:hover{opacity:1;background:rgba(127,127,127,.18)}
-.fab{position:fixed;right:20px;bottom:20px;z-index:2147483000;width:58px;height:58px;border:0;border-radius:50%;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,#0b1a36,#2f7bff);box-shadow:0 14px 34px rgba(11,26,54,.4);transition:transform .15s ease}
+.fab{position:fixed;right:20px;bottom:20px;z-index:2147483000;width:58px;height:58px;border:0;border-radius:50%;display:grid;place-items:center;color:var(--ew-banner-fg,#fff);background:var(--ew-banner,linear-gradient(135deg,#0b1a36,#2f7bff));box-shadow:0 14px 34px rgba(11,26,54,.4);transition:transform .15s ease}
 .fab:hover{transform:translateY(-2px)}
 .layer{position:fixed;inset:0;z-index:2147483500;display:flex;align-items:center;justify-content:center;padding:20px}
 .backdrop{position:absolute;inset:0;background:rgba(5,11,24,.62);backdrop-filter:blur(4px)}
@@ -208,7 +208,7 @@ textarea{resize:vertical;min-height:80px}
 .privacy{margin:0;display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--muted)}
 .privacy .ico{color:var(--blue);margin-top:1px}
 .btn{width:100%;border:0;border-radius:14px;padding:13px 16px;font-size:15px;font-weight:650}
-.btn.primary{color:#fff;background:linear-gradient(135deg,#2f7bff,#4fb8ff);box-shadow:0 10px 24px rgba(47,123,255,.32)}
+.btn.primary{color:var(--ew-cta-fg,#fff);background:var(--ew-cta,linear-gradient(135deg,#2f7bff,#4fb8ff));box-shadow:0 10px 24px rgba(47,123,255,.32)}
 .btn.primary:hover{filter:brightness(1.06)}
 .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
 .btn.end{margin-top:auto}
@@ -226,7 +226,7 @@ textarea{resize:vertical;min-height:80px}
 .ok .ico svg{width:34px;height:34px}
 .done{align-items:center;text-align:center;justify-content:center}
 .call{position:fixed;inset:0;z-index:2147483600;display:flex;flex-direction:column;background:#050b18}
-.call .bar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:52px;color:#fff;background:linear-gradient(90deg,#0b1a36,#14336b);user-select:none}
+.call .bar{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 16px;min-height:52px;color:var(--ew-banner-fg,#fff);background:var(--ew-banner,linear-gradient(90deg,#0b1a36,#14336b));user-select:none}
 .live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;flex:none}
 .call .ttl{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .call .icon-btn{color:#fff}
@@ -277,7 +277,8 @@ textarea{resize:vertical;min-height:80px}
   let bannerOn = true;
   let refs = {};
   let drag = null;
-  const live = { known: false, available: false };
+  const live = { known: false, available: false, visibility: "always", appearance: null, key: "" };
+  let hostEl = null;
   const net = { ctl: null };
 
   function fresh() {
@@ -290,6 +291,52 @@ textarea{resize:vertical;min-height:80px}
   let st = fresh();
 
   const media = { token: 0, stream: null, ctx: null, analyser: null, data: null, raf: 0 };
+
+  var TEXT_KEYS = { title: "bannerTitle", subOn: "subOn", subOff: "subOff", startNow: "startNow", requestCall: "requestCall" };
+  var TEXT_ATTRS = { title: "title", subOn: "subtitleOn", subOff: "subtitleOff", startNow: "buttonOn", requestCall: "buttonOff" };
+
+  function label(key) {
+    var data = SCRIPT ? SCRIPT.dataset : {};
+    var attr = TEXT_ATTRS[key] + (LANG === "en" ? "En" : "");
+    if (data[attr]) return data[attr];
+    var custom = live.appearance && live.appearance[LANG] ? live.appearance[LANG][key] : "";
+    return custom || t[TEXT_KEYS[key]];
+  }
+
+  function readable(hex) {
+    var value = parseInt(hex.slice(1), 16);
+    var r = (value >> 16) & 255;
+    var g = (value >> 8) & 255;
+    var b = value & 255;
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.62 ? "#0b1a36" : "#ffffff";
+  }
+
+  function applyColors() {
+    if (!hostEl) return;
+    var data = SCRIPT ? SCRIPT.dataset : {};
+    var color = /^#[0-9a-f]{6}$/i.test(data.color || "") ? data.color : live.appearance && live.appearance.color;
+    var button = /^#[0-9a-f]{6}$/i.test(data.buttonColor || "") ? data.buttonColor : live.appearance && live.appearance.buttonColor;
+    if (color) {
+      hostEl.style.setProperty("--ew-banner", color);
+      hostEl.style.setProperty("--ew-banner-fg", readable(color));
+    } else {
+      hostEl.style.removeProperty("--ew-banner");
+      hostEl.style.removeProperty("--ew-banner-fg");
+    }
+    if (button) {
+      hostEl.style.setProperty("--ew-cta", button);
+      hostEl.style.setProperty("--ew-cta-fg", readable(button));
+    } else {
+      hostEl.style.removeProperty("--ew-cta");
+      hostEl.style.removeProperty("--ew-cta-fg");
+    }
+  }
+
+  function suppressed() {
+    if (DEMO) return false;
+    if (!live.known) return true;
+    return live.visibility === "hidden" || (live.visibility === "available" && !live.available);
+  }
 
   function config() {
     if (!DEMO) return { available: live.available, answer: "timeout", waitSeconds: WAIT_MS / 1000 };
@@ -861,7 +908,7 @@ textarea{resize:vertical;min-height:80px}
     if (name === "accepted" && data.code) {
       abortLive();
       clearTimers();
-      startCall(ORIGIN + "/admin/live/j/" + encodeURIComponent(data.code) + "#t=" + encodeURIComponent(token));
+      startCall(ORIGIN + "/admin/live/j/" + encodeURIComponent(data.code) + "?lang=" + LANG + "#t=" + encodeURIComponent(token));
     } else if (name === "rejected" || name === "missed") {
       abortLive();
       go("phone", { variant: name === "rejected" ? "reject" : "timeout" });
@@ -957,10 +1004,17 @@ textarea{resize:vertical;min-height:80px}
       .then(function (j) {
         if (!j) return;
         const next = j.available === true;
-        if (!live.known || next !== live.available) {
+        const visibility = j.visibility === "available" || j.visibility === "hidden" ? j.visibility : "always";
+        const key = JSON.stringify([next, visibility, j.appearance || null]);
+        if (!live.known || key !== live.key) {
           live.known = true;
           live.available = next;
+          live.visibility = visibility;
+          live.appearance = j.appearance || null;
+          live.key = key;
+          applyColors();
           renderBanner();
+          syncFab();
         }
       })
       .catch(function () {});
@@ -1054,18 +1108,11 @@ textarea{resize:vertical;min-height:80px}
       style.id = "erenler-live-offset";
       document.head.appendChild(style);
     }
-    style.textContent = bannerOn ? "body{padding-top:" + (basePad + banner.offsetHeight) + "px !important}" : "";
+    style.textContent = bannerOn && !suppressed() ? "body{padding-top:" + (basePad + banner.offsetHeight) + "px !important}" : "";
   }
 
   function syncFab() {
-    if (fab) fab.hidden = bannerOn || st.step === "call";
-  }
-
-  function hideBanner() {
-    bannerOn = false;
-    banner.hidden = true;
-    syncPadding();
-    syncFab();
+    if (fab) fab.hidden = bannerOn || st.step === "call" || suppressed();
   }
 
   function showBanner() {
@@ -1079,19 +1126,19 @@ textarea{resize:vertical;min-height:80px}
     const cta = el("button", {
       type: "button",
       class: "cta",
-      text: c.available ? t.startNow : t.requestCall,
+      text: c.available ? label("startNow") : label("requestCall"),
       on: { click: function () { openModal(c.available ? "prepare" : "offline", cta); } }
     });
     banner.textContent = "";
-    banner.hidden = !bannerOn;
+    banner.hidden = !bannerOn || suppressed();
+    banner.setAttribute("aria-label", label("title"));
     banner.append(
       el("span", { class: "dot " + (c.available ? "on" : "off"), role: "img", "aria-label": c.available ? t.stateOn : t.stateOff }),
       el("div", { class: "btext" }, [
-        el("div", { class: "btitle", text: t.bannerTitle }),
-        el("div", { class: "bsub", text: c.available ? t.subOn : t.subOff })
+        el("div", { class: "btitle", text: label("title") }),
+        el("div", { class: "bsub", text: c.available ? label("subOn") : label("subOff") })
       ]),
-      cta,
-      el("button", { type: "button", class: "icon-btn", title: t.dismiss, "aria-label": t.dismiss, on: { click: hideBanner } }, [icon("x")])
+      cta
     );
     syncPadding();
   }
@@ -1178,12 +1225,14 @@ textarea{resize:vertical;min-height:80px}
   function init() {
     const host = document.createElement("div");
     host.id = "erenler-live";
+    hostEl = host;
     if (SCRIPT && SCRIPT.dataset.container) host.style.setProperty("--ew-max", SCRIPT.dataset.container);
     if (SCRIPT && SCRIPT.dataset.gutter) host.style.setProperty("--ew-pad", SCRIPT.dataset.gutter);
     document.body.appendChild(host);
     root = host.attachShadow({ mode: "open" });
     basePad = parseFloat(window.getComputedStyle(document.body).paddingTop) || 0;
     buildShell();
+    applyColors();
     renderBanner();
     syncFab();
     if (!DEMO) {

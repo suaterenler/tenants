@@ -2,11 +2,13 @@ import "server-only";
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { inviteCode, type LiveMessage, type LiveParticipant, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
+import { emptyAppearance, inviteCode, parseAppearance, type LiveMessage, type LiveParticipant, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 
 type LiveData = { settings: LiveSettings; sessions: LiveSession[] };
 
-const DEFAULT_SETTINGS: LiveSettings = { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım" };
+function defaultSettings(): LiveSettings {
+  return { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım", visibility: "always", appearance: emptyAppearance() };
+}
 
 let queue: Promise<unknown> = Promise.resolve();
 
@@ -51,11 +53,11 @@ async function readData(): Promise<LiveData> {
   try {
     const raw = JSON.parse(await readFile(liveFile(), "utf8")) as Partial<LiveData>;
     return {
-      settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
+      settings: { ...defaultSettings(), ...(raw.settings ?? {}), appearance: parseAppearance(raw.settings?.appearance) ?? emptyAppearance() },
       sessions: Array.isArray(raw.sessions) ? raw.sessions.map(withDefaults) : [],
     };
   } catch {
-    return { settings: { ...DEFAULT_SETTINGS }, sessions: [] };
+    return { settings: defaultSettings(), sessions: [] };
   }
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Bell, BellRing, CalendarClock, Check, Copy, Loader2, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
+import { Bell, BellRing, CalendarClock, Check, Copy, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { AdminHeader } from "@/components/panel/admin-header";
@@ -10,6 +10,7 @@ import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/he
 import { RelativeTimeChip } from "@/components/panel/relative-time-chip";
 import { inviteUrl, LiveSessionDialog, StatusPill } from "@/components/live/session-dialog";
 import { enablePush } from "@/components/live/push";
+import { AppearanceDialog } from "@/components/live/appearance-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,8 +18,12 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, authHeaders, BASE_PATH, readToken, storeToken } from "@/lib/admin-client";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { durationMinutes, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
+import { durationMinutes, emptyAppearance, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 import { cn } from "@/lib/utils";
+
+type SiteMode = "hidden" | "available" | "request";
+
+const SITE_MODES: SiteMode[] = ["hidden", "available", "request"];
 
 type TextFilters = { name: string; phone: string; email: string };
 
@@ -151,6 +156,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [settings, setSettings] = useState<LiveSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [hostDraft, setHostDraft] = useState<string | null>(null);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [sound, setSound] = useState(readSoundPref);
   const [notify, setNotify] = useState<NotificationPermission | "unsupported">(() => (typeof Notification === "undefined" ? "unsupported" : Notification.permission));
   const [tab, setTab] = useState<"all" | "reminders">("all");
@@ -166,6 +172,9 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const reloadRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const available = settings?.available ?? false;
+  const visibility = settings?.visibility ?? "always";
+  const mode: SiteMode = visibility === "hidden" || (visibility === "available" && !available) ? "hidden" : available ? "available" : "request";
+  const siteState = mode === "hidden" ? t.live.siteHidden : mode === "available" ? t.live.availableOn : t.live.availableOff;
   const waiting = items.filter((item) => item.status === "waiting");
   const reminders = items.filter((item) => isReminderDue(item));
   const selected = items.find((item) => item.id === selectedId) ?? null;
@@ -298,10 +307,11 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
     };
   }, []);
 
-  async function setAvailable(next: boolean) {
-    setSettings((current) => (current ? { ...current, available: next } : current));
+  async function setMode(next: SiteMode) {
+    const body = next === "hidden" ? { available: false, visibility: "hidden" as const } : { available: next === "available", visibility: "always" as const };
+    setSettings((current) => (current ? { ...current, ...body } : current));
     try {
-      setSettings(await adminFetch<LiveSettings>("/live/settings", { method: "PUT", body: { available: next } }));
+      setSettings(await adminFetch<LiveSettings>("/live/settings", { method: "PUT", body }));
     } catch {
       toast.error(t.live.saveFailed);
       void reload();
@@ -317,6 +327,16 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       toast.success(t.live.hostNameSaved);
     } catch {
       toast.error(t.live.saveFailed);
+    }
+  }
+
+  async function saveSettings(body: Partial<LiveSettings>) {
+    try {
+      setSettings(await adminFetch<LiveSettings>("/live/settings", { method: "PUT", body }));
+      toast.success(t.live.settingsSaved);
+    } catch {
+      toast.error(t.live.saveFailed);
+      throw new Error("save");
     }
   }
 
@@ -418,21 +438,46 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
           <Card className={cn("overflow-hidden border-2 transition-colors", available ? "border-emerald-500/50" : "border-transparent")}>
             <CardContent className="flex flex-col gap-4 p-4">
-              <label className="flex cursor-pointer items-start gap-3">
-                <span className={cn("mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full", available ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground")}>
-                  <span className="relative flex size-3">
-                    {available ? <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" /> : null}
-                    <span className={cn("relative inline-flex size-3 rounded-full", available ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-3">
+                  <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-full", mode === "available" ? "bg-emerald-500/15" : mode === "request" ? "bg-amber-500/15" : "bg-muted")}>
+                    <span className="relative flex size-3">
+                      {mode === "available" ? <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-500 opacity-60" /> : null}
+                      <span className={cn("relative inline-flex size-3 rounded-full", mode === "available" ? "bg-emerald-500" : mode === "request" ? "bg-amber-500" : "bg-muted-foreground/50")} />
+                    </span>
                   </span>
-                </span>
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex items-center justify-between gap-3 font-medium">
-                    {t.live.available}
-                    <Switch checked={available} disabled={!settings} onCheckedChange={(next) => void setAvailable(next)} aria-label={t.live.available} />
-                  </span>
-                  <span className="min-h-10 text-sm text-muted-foreground">{available ? t.live.availableOn : t.live.availableOff}</span>
-                </span>
-              </label>
+                  <span className="min-w-0 flex-1 font-medium">{t.live.siteMode}</span>
+                  <Button variant="outline" size="icon-sm" disabled={!settings} onClick={() => setAppearanceOpen(true)} aria-label={t.live.appearance.open} title={t.live.appearance.open}>
+                    <Palette className="size-4" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="radiogroup" aria-label={t.live.siteMode}>
+                  {SITE_MODES.map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={mode === key}
+                      disabled={!settings}
+                      onClick={() => void setMode(key)}
+                      className={cn(
+                        "inline-flex h-9 items-center justify-center gap-1.5 rounded-md px-2 text-sm font-medium transition-colors disabled:opacity-50",
+                        mode === key
+                          ? key === "available"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : key === "request"
+                              ? "bg-amber-500 text-white shadow-sm"
+                              : "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {key === "hidden" ? <EyeOff className="size-4" /> : key === "available" ? <Video className="size-4" /> : <PhoneIncoming className="size-4" />}
+                      {t.live.siteModes[key]}
+                    </button>
+                  ))}
+                </div>
+                <span className="min-h-10 text-sm text-muted-foreground">{siteState}</span>
+              </div>
               <div className="flex flex-col gap-1.5 border-t pt-3 text-sm">
                 <label htmlFor="live-host-name" className="font-medium">
                   {t.live.hostName}
@@ -488,7 +533,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                   <span className="flex size-11 items-center justify-center rounded-full bg-muted">
                     <Video className="size-5" />
                   </span>
-                  {available ? t.live.availableOn : t.live.availableOff}
+                  {siteState}
                 </CardContent>
               </Card>
             ) : (
@@ -700,6 +745,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </main>
 
+      <AppearanceDialog open={appearanceOpen} value={settings?.appearance ?? emptyAppearance()} onClose={() => setAppearanceOpen(false)} onSave={(appearance) => saveSettings({ appearance })} />
       <LiveSessionDialog
         session={selected}
         sessions={items}

@@ -10,5 +10,5 @@ export function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   startLiveJobs();
   const settings = await getSettings();
-  return corsJson(request, { available: settings.available });
+  return corsJson(request, { available: settings.available, visibility: settings.visibility, appearance: settings.appearance });
 }

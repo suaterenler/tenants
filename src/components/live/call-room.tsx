@@ -103,7 +103,7 @@ function useElapsed(running: boolean): string {
 }
 
 function clock(at: string): string {
-  return new Date(at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(at).toLocaleTimeString(document.documentElement.lang === "en" ? "en-GB" : "tr-TR", { hour: "2-digit", minute: "2-digit" });
 }
 
 function readName(): string {
@@ -267,7 +267,7 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
 }
 
 function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomState; code: string; t: RoomText }) {
-  const { messages: all } = useI18n();
+  const { messages: all, locale } = useI18n();
   const role = room.role;
   const me = room.selfName;
   const elapsed = useElapsed(true);
@@ -599,7 +599,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }
 
   async function copyInvite() {
-    await navigator.clipboard.writeText(`${window.location.origin}${BASE_PATH}/live/j/${code}`);
+    await navigator.clipboard.writeText(`${window.location.origin}${BASE_PATH}/live/j/${code}${locale === "en" ? "?lang=en" : ""}`);
     toast.success(all.live.linkCopied);
   }
 
