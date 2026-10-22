@@ -216,7 +216,7 @@ input[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--dang
 textarea{resize:vertical;min-height:80px}
 .ferr{min-height:18px;font-size:12.5px;color:var(--danger)}
 .preview{position:relative;aspect-ratio:16/10;border-radius:16px;overflow:hidden;background:radial-gradient(circle at 30% 20%,#23509a,#0b1a36 70%)}
-.preview video{width:100%;height:100%;object-fit:cover;display:block}
+.preview video{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
 .preview .off{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:#cfe0ff;font-size:14px}
 .preview .off .ico svg{width:34px;height:34px}
 .preview.nocam .off{display:flex}

@@ -33,6 +33,7 @@ import {
   SignalLow,
   SignalZero,
   Star,
+  SwitchCamera,
   UserMinus,
   UserPlus,
   UserRound,
@@ -326,6 +327,8 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   const [devices, setDevices] = useState<Devices>({ audioinput: [], videoinput: [], audiooutput: [] });
   const [micId, setMicId] = useState("");
   const [camId, setCamId] = useState("");
+  const [facing, setFacing] = useState("");
+  const touch = useSyncExternalStore(noopSubscribe, () => window.matchMedia("(pointer: coarse)").matches, () => false);
   const [speakerId, setSpeakerId] = useState("");
   const [level, setLevel] = useState(0);
   const [panel, setPanel] = useState<"chat" | "notes" | null>(null);
@@ -375,12 +378,17 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }, [client]);
 
   const startMedia = useCallback(
-    async (mic: string, cam: string) => {
+    async (mic: string, cam: string, facingMode?: string) => {
       const previous = streamRef.current;
+      if (facingMode) previous?.getVideoTracks().forEach((track) => track.stop());
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: mic ? { deviceId: { exact: mic }, echoCancellation: true, noiseSuppression: true } : { echoCancellation: true, noiseSuppression: true },
-          video: cam ? { deviceId: { exact: cam }, width: { ideal: 1280 }, height: { ideal: 720 } } : { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: facingMode
+            ? { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
+            : cam
+              ? { deviceId: { exact: cam }, width: { ideal: 1280 }, height: { ideal: 720 } }
+              : { width: { ideal: 1280 }, height: { ideal: 720 } },
         });
         previous?.getTracks().forEach((track) => track.stop());
         streamRef.current = stream;
@@ -399,6 +407,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         });
         setMicId(stream.getAudioTracks()[0]?.getSettings().deviceId ?? "");
         setCamId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? "");
+        setFacing(stream.getVideoTracks()[0]?.getSettings().facingMode ?? "");
       } catch {
         setBlocked(true);
         setCamOn(false);
@@ -745,7 +754,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     if (id === "me") {
       return (
         <div className="group/tile relative size-full">
-          <SelfTile videoRef={attachLocal} name={me} camOn={camOn} micOn={micOn} blocked={blocked} level={level} small={small} youLabel={t.you} blockedText={t.cameraBlocked} host={role === "host"} hostLabel={t.host} />
+          <SelfTile videoRef={attachLocal} name={me} camOn={camOn} mirror={facing !== "environment"} micOn={micOn} blocked={blocked} level={level} small={small} youLabel={t.you} blockedText={t.cameraBlocked} host={role === "host"} hostLabel={t.host} />
           <div className="absolute top-2 left-2 z-10 flex gap-1">
             {pin}
             {tileButton(t.rename, () => setRenaming(me), <Pencil className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100")}
@@ -757,7 +766,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     if (!peer) return null;
     return (
       <div className="group/tile relative size-full">
-        <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} t={t} />
+        <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} inPip={pipOn && !sharerPeer?.screen && peer.peerId === pipPeer?.peerId} onPipExit={() => void togglePip()} t={t} />
         <div className="absolute top-2 left-2 z-10 flex gap-1">
           {pin}
           {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 hover:bg-red-600") : null}
@@ -816,6 +825,11 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
             menuLabel={t.devices}
             groups={[{ label: t.camera, items: devices.videoinput, value: camId, onChange: (id) => { setCamId(id); void startMedia(micId, id); } }]}
           />
+          {touch && facing && devices.videoinput.length > 1 ? (
+            <ToolButton label={t.flipCamera} disabled={blocked || !camOn} onClick={() => void startMedia(micId, "", facing === "environment" ? "user" : "environment")}>
+              <SwitchCamera className="size-5" />
+            </ToolButton>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -1456,6 +1470,7 @@ function SelfTile({
   videoRef,
   name,
   camOn,
+  mirror,
   micOn,
   blocked,
   level,
@@ -1468,6 +1483,7 @@ function SelfTile({
   videoRef: (element: HTMLVideoElement | null) => void;
   name: string;
   camOn: boolean;
+  mirror: boolean;
   micOn: boolean;
   blocked: boolean;
   level: number;
@@ -1480,7 +1496,7 @@ function SelfTile({
   const speaking = micOn && level > 0.15;
   return (
     <div className={cn("relative size-full overflow-hidden rounded-xl bg-neutral-800 ring-2 transition-shadow", speaking ? "ring-emerald-400" : "ring-white/5")}>
-      <video ref={videoRef} autoPlay muted playsInline className={cn("size-full object-cover", camOn ? "" : "invisible")} />
+      <video ref={videoRef} autoPlay muted playsInline className={cn("size-full object-cover", mirror ? "-scale-x-100" : "", camOn ? "" : "invisible")} />
       {!camOn ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-neutral-800 to-neutral-900 p-3 text-center">
           <span className={cn("flex items-center justify-center rounded-full bg-sky-700 font-semibold text-white", small ? "size-10 text-sm" : "size-20 text-2xl")}>{initials(name)}</span>
@@ -1501,7 +1517,7 @@ function HostStar({ label, small }: { label: string; small?: boolean }) {
   );
 }
 
-function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, t }: { peer: RemotePeer; small?: boolean; hostLost: boolean; speakerId: string; onAudioBlocked: () => void; t: RoomText }) {
+function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, inPip, onPipExit, t }: { peer: RemotePeer; small?: boolean; hostLost: boolean; speakerId: string; onAudioBlocked: () => void; inPip: boolean; onPipExit: () => void; t: RoomText }) {
   const lost = peer.rtc === "reconnecting" || (hostLost && peer.role === "host");
   const failed = peer.rtc === "failed";
   const hue = hueOf(peer.name);
@@ -1509,6 +1525,15 @@ function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, t }: { pee
   return (
     <div className={cn("relative size-full overflow-hidden rounded-xl ring-2 transition-shadow", peer.speaking && !lost ? "ring-emerald-400" : "ring-white/5")} style={{ background: `radial-gradient(circle at 30% 20%, hsl(${hue} 45% 32%), hsl(${hue} 35% 12%))` }}>
       <StreamVideo stream={peer.stream} sinkId={speakerId} onBlocked={onAudioBlocked} className={cn("absolute inset-0 size-full object-cover", hasVideo ? "" : "invisible")} />
+      {inPip ? (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900 p-3 text-center">
+          <PictureInPicture2 className={cn("text-neutral-400", small ? "size-5" : "size-8")} />
+          {!small ? <p className="text-sm text-neutral-300">{t.pipActive}</p> : null}
+          <Button size="sm" variant="secondary" onClick={onPipExit}>
+            {t.pipBack}
+          </Button>
+        </div>
+      ) : null}
       {!hasVideo ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className={cn("flex items-center justify-center rounded-full font-semibold text-white shadow-lg", small ? "size-10 text-sm" : "size-24 text-3xl", peer.speaking && !lost ? "ring-4 ring-emerald-400/50" : "")} style={{ background: `hsl(${hue} 55% 42%)` }}>
