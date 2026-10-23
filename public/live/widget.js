@@ -1371,7 +1371,7 @@ textarea{resize:vertical;min-height:80px}
       callToggle,
       el("button", { type: "button", class: "icon-btn", title: t.endCall, "aria-label": t.endCall, on: { click: askEndCall } }, [icon("x")])
     ]);
-    frame = el("iframe", { title: t.callTitle, allow: "camera; microphone; display-capture; autoplay; fullscreen; picture-in-picture" });
+    frame = el("iframe", { title: t.callTitle, allow: "camera; microphone; display-capture; autoplay; fullscreen; picture-in-picture; clipboard-write" });
     const grips = ["nw", "ne", "sw", "se"].map(function (corner) {
       const grip = el("span", { class: "grip " + corner, "aria-hidden": "true" });
       grip.addEventListener("pointerdown", function (e) {

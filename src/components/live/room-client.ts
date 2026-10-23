@@ -337,7 +337,9 @@ export class RoomClient {
       const peer = this.state.peers.find((item) => item.peerId === peerId);
       if (!peer) return;
       if (index === 2) {
-        this.patchPeer(peerId, { screen: new MediaStream([event.track]) });
+        const track = event.track;
+        this.patchPeer(peerId, { screen: new MediaStream([track]) });
+        track.onunmute = () => this.patchPeer(peerId, { screen: new MediaStream([track]) });
         return;
       }
       if (index === 0) link.audio = event.track;
@@ -353,22 +355,17 @@ export class RoomClient {
 
   private tuneSenders(pc: RTCPeerConnection) {
     const transceivers = pc.getTransceivers();
-    const limits: [number, number, RTCDegradationPreference][] = [
-      [1, 2_500_000, "balanced"],
-      [2, 3_000_000, "maintain-resolution"],
+    const limits: [number, number][] = [
+      [1, this.tracks.screen ? 600_000 : 2_500_000],
+      [2, 3_000_000],
     ];
-    for (const [index, maxBitrate, preference] of limits) {
+    for (const [index, maxBitrate] of limits) {
       const sender = transceivers[index]?.sender;
       if (!sender) continue;
       const params = sender.getParameters();
       if (!params.encodings?.length) continue;
       params.encodings = params.encodings.map((encoding) => ({ ...encoding, maxBitrate }));
-      const withPreference: RTCRtpSendParameters & { degradationPreference?: RTCDegradationPreference } = { ...params, degradationPreference: preference };
-      void sender.setParameters(withPreference).catch(() => {
-        const fresh = sender.getParameters();
-        fresh.encodings = (fresh.encodings ?? []).map((encoding) => ({ ...encoding, maxBitrate }));
-        return sender.setParameters(fresh).catch(() => undefined);
-      });
+      void sender.setParameters(params).catch(() => undefined);
     }
   }
 
@@ -461,6 +458,7 @@ export class RoomClient {
       order.forEach((key, index) => {
         if (key in next && transceivers[index]) void transceivers[index].sender.replaceTrack(this.tracks[key]).catch(() => undefined);
       });
+      if ("screen" in next && link.pc.connectionState === "connected") this.tuneSenders(link.pc);
     }
   }
 

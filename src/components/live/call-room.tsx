@@ -118,33 +118,75 @@ function readName(): string {
 
 let chimeAudio: AudioContext | null = null;
 
-function knockChime(): void {
+function playTones(tones: [number, number][], volume: number, length: number): void {
   try {
     chimeAudio ??= new AudioContext();
     const ctx = chimeAudio;
     if (ctx.state === "suspended") void ctx.resume();
     const start = ctx.currentTime + 0.05;
-    for (const [offset, frequency] of [
-      [0, 988],
-      [0.22, 784],
-      [0.7, 988],
-      [0.92, 784],
-    ]) {
+    for (const [offset, frequency] of tones) {
       const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
       const at = start + offset;
       oscillator.type = "sine";
       oscillator.frequency.value = frequency;
       gain.gain.setValueAtTime(0.0001, at);
-      gain.gain.exponentialRampToValueAtTime(0.3, at + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.35);
+      gain.gain.exponentialRampToValueAtTime(volume, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + length);
       oscillator.connect(gain);
       gain.connect(ctx.destination);
       oscillator.start(at);
-      oscillator.stop(at + 0.4);
+      oscillator.stop(at + length + 0.05);
     }
   } catch {
     return;
+  }
+}
+
+function knockChime(): void {
+  playTones(
+    [
+      [0, 988],
+      [0.22, 784],
+      [0.7, 988],
+      [0.92, 784],
+    ],
+    0.3,
+    0.35,
+  );
+}
+
+function messageChime(): void {
+  playTones(
+    [
+      [0, 784],
+      [0.1, 1175],
+    ],
+    0.12,
+    0.18,
+  );
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+    document.body.appendChild(area);
+    area.select();
+    area.setSelectionRange(0, text.length);
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    area.remove();
+    return ok;
   }
 }
 
@@ -447,6 +489,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
 
   useEffect(() => {
     client.onIncoming = (message) => {
+      messageChime();
       setPanel((current) => {
         if (current !== "chat") {
           setUnread((count) => count + 1);
@@ -707,10 +750,12 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     if (someoneElseSharing && role !== "host") return;
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const options: DisplayMediaStreamOptions & { selfBrowserSurface?: string } = { video: true, audio: false, selfBrowserSurface: "exclude" };
+      stream = await navigator.mediaDevices.getDisplayMedia(options);
     } catch {
       return;
     }
+    stream.getVideoTracks().forEach((track) => (track.contentHint = "detail"));
     try {
       await client.post({ kind: "share", on: true });
     } catch (error) {
@@ -770,8 +815,9 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }
 
   async function copyInvite() {
-    await navigator.clipboard.writeText(`${window.location.origin}${BASE_PATH}/live/join/${code}${locale === "en" ? "?lang=en" : ""}`);
-    toast.success(all.live.linkCopied);
+    const ok = await copyText(`${window.location.origin}${BASE_PATH}/live/join/${code}${locale === "en" ? "?lang=en" : ""}`);
+    if (ok) toast.success(all.live.linkCopied);
+    else toast.error(t.failed);
   }
 
   function setSetting(patch: { approveJoin?: boolean; guestShare?: boolean }) {
@@ -855,7 +901,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     if (!peer) return null;
     return (
       <div className="group/tile relative size-full">
-        <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} inPip={pipOn && !sharerPeer?.screen && peer.peerId === pipPeer?.peerId} onPipExit={() => void togglePip()} t={t} />
+        <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} t={t} />
         <div className="absolute top-2 left-2 z-10 flex gap-1">
           {pin}
           {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100 hover:bg-red-600") : null}
@@ -874,8 +920,10 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     peers[0];
   const pipStream = sharerPeer?.screen ?? pipPeer?.stream ?? null;
   const canFlip = touch && Boolean(facing) && devices.videoinput.length > 1;
-  const pipHiddenId = touch && pipOn && !sharerPeer?.screen ? pipPeer?.peerId : undefined;
-  const gridTiles = tiles.filter((id) => id !== pipHiddenId);
+  const pipHiddenId = pipOn && !sharerPeer?.screen ? pipPeer?.peerId : undefined;
+  const layoutTiles = tiles.filter((id) => id !== pipHiddenId);
+  const layoutFocus = focusId === pipHiddenId ? (layoutTiles.find((id) => id !== "me") ?? "me") : focusId;
+  const cornerId = layoutFocus === "me" ? layoutTiles.find((id) => id !== "me") : "me";
   const mine =(message: RoomMessage) => (message.peerId ? message.peerId === room.selfId : message.author === me && message.role === role);
 
   return (
@@ -1103,6 +1151,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
 
       <div className="flex min-h-0 flex-1 pb-16 sm:pb-0">
         <main className="relative min-w-0 flex-1 p-2 sm:p-3">
+          {pipHiddenId ? <div className="hidden">{renderTile(pipHiddenId, true)}</div> : null}
           {peers.length === 0 && !sharer ? (
             <div className="flex h-full flex-col gap-2 sm:gap-3 lg:flex-row">
               <div className="min-h-0 flex-1">{renderTile("me", false)}</div>
@@ -1131,14 +1180,27 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
           ) : sharer ? (
             <div className="flex h-full flex-col gap-2 lg:flex-row">
               <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl bg-black ring-1 ring-white/10">
-                {sharer === "me" ? <video ref={attachScreen} autoPlay muted playsInline className="size-full object-contain" /> : <StreamVideo stream={sharerPeer?.screen ?? null} muted className="size-full object-contain" />}
+                {sharer === "me" ? <video ref={attachScreen} autoPlay muted playsInline className="invisible size-full object-contain" /> : <StreamVideo stream={sharerPeer?.screen ?? null} muted className="size-full object-contain" />}
+                {sharer === "me" ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                    <span className="flex size-14 items-center justify-center rounded-full bg-sky-500/15 text-sky-400">
+                      <MonitorUp className="size-7" />
+                    </span>
+                    <p className="text-lg font-semibold">{t.presenting}</p>
+                    <p className="max-w-sm text-sm text-neutral-400">{t.presentingHint}</p>
+                    <Button className="bg-red-600 text-white hover:bg-red-700" onClick={stopShare}>
+                      <MonitorX className="size-4" />
+                      {t.stopShare}
+                    </Button>
+                  </div>
+                ) : null}
                 <span className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1 text-xs font-medium">
                   <MonitorUp className="size-3.5 text-sky-400" />
                   {t.sharingBy.replace("{name}", sharerName)}
                 </span>
               </div>
               <div className={cn("flex shrink-0 gap-2 overflow-x-auto lg:w-56 lg:flex-col lg:overflow-y-auto", view === "speaker" && "h-0 w-0 overflow-hidden lg:w-0")}>
-                {tiles.map((id) => (
+                {layoutTiles.map((id) => (
                   <div key={id} className="aspect-video w-40 shrink-0 lg:w-full">
                     {renderTile(id, true)}
                   </div>
@@ -1146,19 +1208,19 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
               </div>
             </div>
           ) : view === "grid" ? (
-            <div className={cn("grid h-full auto-rows-fr gap-2 sm:gap-3", GRID_COLUMNS[Math.min(gridTiles.length, 12)], gridTiles.length > 4 && "auto-rows-[minmax(7rem,1fr)] overflow-y-auto")}>
-              {tiles.map((id) => (
-                <div key={id} className={id === pipHiddenId ? "hidden" : "min-h-0"}>
+            <div className={cn("grid h-full auto-rows-fr gap-2 sm:gap-3", GRID_COLUMNS[Math.min(layoutTiles.length, 12)], layoutTiles.length > 4 && "auto-rows-[minmax(7rem,1fr)] overflow-y-auto")}>
+              {layoutTiles.map((id) => (
+                <div key={id} className="min-h-0">
                   {renderTile(id, false)}
                 </div>
               ))}
             </div>
           ) : view === "focus" ? (
             <div className="flex h-full flex-col gap-2 lg:flex-row">
-              <div className="min-h-0 flex-1">{renderTile(focusId, false)}</div>
+              <div className="min-h-0 flex-1">{renderTile(layoutFocus, false)}</div>
               <div className="flex shrink-0 gap-2 overflow-x-auto lg:w-56 lg:flex-col lg:overflow-y-auto">
-                {tiles
-                  .filter((id) => id !== focusId)
+                {layoutTiles
+                  .filter((id) => id !== layoutFocus)
                   .map((id) => (
                     <div key={id} className="aspect-video w-40 shrink-0 lg:w-full">
                       {renderTile(id, true)}
@@ -1168,11 +1230,11 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
             </div>
           ) : (
             <div className="relative h-full">
-              {renderTile(focusId, false)}
-              <div className="absolute right-3 bottom-3 z-10 aspect-video w-32 shadow-2xl sm:w-48">{renderTile(focusId === "me" ? peers[0].peerId : "me", true)}</div>
+              {renderTile(layoutFocus, false)}
+              {cornerId ? <div className="absolute right-3 bottom-3 z-10 aspect-video w-32 shadow-2xl sm:w-48">{renderTile(cornerId, true)}</div> : null}
               <div className="hidden">
-                {tiles
-                  .filter((id) => id !== focusId && id !== "me" && id !== (focusId === "me" ? peers[0].peerId : ""))
+                {layoutTiles
+                  .filter((id) => id !== layoutFocus && id !== cornerId)
                   .map((id) => (
                     <div key={id}>{renderTile(id, true)}</div>
                   ))}
@@ -1547,7 +1609,7 @@ function HostStar({ label, small }: { label: string; small?: boolean }) {
   );
 }
 
-function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, inPip, onPipExit, t }: { peer: RemotePeer; small?: boolean; hostLost: boolean; speakerId: string; onAudioBlocked: () => void; inPip: boolean; onPipExit: () => void; t: RoomText }) {
+function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, t }: { peer: RemotePeer; small?: boolean; hostLost: boolean; speakerId: string; onAudioBlocked: () => void; t: RoomText }) {
   const lost = peer.rtc === "reconnecting" || (hostLost && peer.role === "host");
   const failed = peer.rtc === "failed";
   const hue = hueOf(peer.name);
@@ -1555,15 +1617,6 @@ function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, inPip, onP
   return (
     <div className={cn("relative size-full overflow-hidden rounded-xl ring-2 transition-shadow", peer.speaking && !lost ? "ring-emerald-400" : "ring-white/5")} style={{ background: `radial-gradient(circle at 30% 20%, hsl(${hue} 45% 32%), hsl(${hue} 35% 12%))` }}>
       <StreamVideo stream={peer.stream} sinkId={speakerId} onBlocked={onAudioBlocked} className={cn("absolute inset-0 size-full object-cover", hasVideo ? "" : "invisible")} />
-      {inPip ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-neutral-900 p-3 text-center">
-          <PictureInPicture2 className={cn("text-neutral-400", small ? "size-5" : "size-8")} />
-          {!small ? <p className="text-sm text-neutral-300">{t.pipActive}</p> : null}
-          <Button size="sm" variant="secondary" onClick={onPipExit}>
-            {t.pipBack}
-          </Button>
-        </div>
-      ) : null}
       {!hasVideo ? (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className={cn("flex items-center justify-center rounded-full font-semibold text-white shadow-lg", small ? "size-10 text-sm" : "size-24 text-3xl", peer.speaking && !lost ? "ring-4 ring-emerald-400/50" : "")} style={{ background: `hsl(${hue} 55% 42%)` }}>
