@@ -16,16 +16,27 @@ import { durationMinutes, formatPhone, initials, isValidPhone, type LiveSession,
 import { cn } from "@/lib/utils";
 
 const STATUS_STYLE: Record<LiveStatus, string> = {
-  waiting: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
-  active: "bg-teal-500/15 text-teal-700 dark:text-teal-400",
-  request: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  waiting: "bg-violet-500/15 text-violet-700 dark:text-violet-400",
+  active: "bg-sky-500/15 text-sky-700 dark:text-sky-400",
+  request: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
   completed: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  missed: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  missed: "bg-slate-500/15 text-slate-600 dark:text-slate-400",
   rejected: "bg-red-500/15 text-red-700 dark:text-red-400",
 };
 
+export const STATUS_COLOR: Record<LiveStatus, string> = {
+  waiting: "#8b5cf6",
+  active: "#0ea5e9",
+  request: "#f59e0b",
+  completed: "#10b981",
+  missed: "#64748b",
+  rejected: "#ef4444",
+};
+
 export function inviteUrl(code: string): string {
-  return `${window.location.origin}${BASE_PATH}/live/join/${code}`;
+  if (typeof window === "undefined") return `/meet/${code}`;
+  const short = window.location.hostname.endsWith("erenleryazilim.com");
+  return short ? `${window.location.origin}/meet/${code}` : `${window.location.origin}${BASE_PATH}/live/join/${code}`;
 }
 
 export function StatusPill({ status }: { status: LiveStatus }) {

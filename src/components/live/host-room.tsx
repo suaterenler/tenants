@@ -2,14 +2,10 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { CallRoom } from "@/components/live/call-room";
-import { BASE_PATH, readToken } from "@/lib/admin-client";
-
-function noopSubscribe(): () => void {
-  return () => undefined;
-}
+import { BASE_PATH, subscribeToken, tokenState } from "@/lib/admin-client";
 
 export function HostRoom({ code }: { code: string }) {
-  const signedIn = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
+  const signedIn = useSyncExternalStore(subscribeToken, tokenState, () => null);
 
   useEffect(() => {
     if (signedIn === false) window.location.replace(BASE_PATH);

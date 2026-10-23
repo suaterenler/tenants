@@ -82,7 +82,7 @@ export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "ema
 
 export const LIVE_WAIT_SECONDS = 60;
 export const LIVE_QUEUE_SECONDS = 10 * 60;
-export const LIVE_ROOM_IDLE_HOURS = 2;
+export const LIVE_ROOM_EMPTY_MINUTES = 3;
 export const LIVE_MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 function text(value: unknown, max: number): string {

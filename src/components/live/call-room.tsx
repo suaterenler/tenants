@@ -48,6 +48,7 @@ import {
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { BackgroundEffect, type BackgroundMode } from "@/components/live/background-effect";
+import { inviteUrl } from "@/components/live/session-dialog";
 import { HttpError, RoomClient, type RemotePeer, type RoomMessage, type RoomState } from "@/components/live/room-client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -815,7 +816,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }
 
   async function copyInvite() {
-    const ok = await copyText(`${window.location.origin}${BASE_PATH}/live/join/${code}${locale === "en" ? "?lang=en" : ""}`);
+    const ok = await copyText(`${inviteUrl(code)}${locale === "en" ? "?lang=en" : ""}`);
     if (ok) toast.success(all.live.linkCopied);
     else toast.error(t.failed);
   }
@@ -1045,7 +1046,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                 </div>
                 <p className="text-xs text-neutral-400">{t.inviteHint}</p>
                 <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">…/live/join/{code}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{inviteUrl(code).replace(/^https?:\/\/[^/]+/, "…")}</span>
                   <Button size="xs" variant="secondary" onClick={() => void copyInvite()}>
                     <Copy className="size-3" />
                     {all.tenants.copy}

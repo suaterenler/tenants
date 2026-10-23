@@ -231,6 +231,7 @@ export const en: Messages = {
     total: "{count} records",
     date: "Date",
     code: "Code",
+    openRoom: "Open call in a new tab",
     name: "Full name",
     phone: "Phone",
     email: "Email",

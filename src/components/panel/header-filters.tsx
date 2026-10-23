@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { RangePicker } from "@/components/panel/range-picker";
-import { OptionSelect } from "@/components/panel/option-select";
+import { OptionSelect, type SelectOption } from "@/components/panel/option-select";
 import { Input } from "@/components/ui/input";
 
 export function HeaderText({ value, onChange, label }: { value: string; onChange: (value: string) => void; label: string }) {
@@ -18,7 +18,7 @@ export function HeaderText({ value, onChange, label }: { value: string; onChange
   );
 }
 
-export function HeaderSelect({ value, onChange, options, allLabel, label, className = "min-w-32" }: { value: string; onChange: (value: string) => void; options: { value: string; label: string }[]; allLabel: string; label: string; className?: string }) {
+export function HeaderSelect({ value, onChange, options, allLabel, label, className = "min-w-32" }: { value: string; onChange: (value: string) => void; options: SelectOption[]; allLabel: string; label: string; className?: string }) {
   return (
     <div className={`relative w-full font-normal ${className}`} onClick={(event) => event.stopPropagation()}>
       <OptionSelect compact value={value} onChange={onChange} options={options} emptyLabel={allLabel} ariaLabel={label} />

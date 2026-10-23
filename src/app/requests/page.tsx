@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { adminFetch, AdminRequestError, BASE_PATH, readToken, storeToken } from "@/lib/admin-client";
+import { adminFetch, AdminRequestError, BASE_PATH, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
 import { formatDateTime } from "@/lib/format";
 import { excelDate, writeExcel } from "@/lib/excel";
 import { columnMatches, findSimilarRequests, inDateRange, programForProduct, programNameForProduct, REQUEST_STATUSES, trialExpiry, type RequestStatus, type SimilarReason, type TrialRequest } from "@/lib/requests";
@@ -35,10 +35,6 @@ const STATUS_TONE: Record<RequestStatus, string> = {
   rejected: "text-muted-foreground",
 };
 
-function noopSubscribe(): () => void {
-  return () => undefined;
-}
-
 export default function RequestsPage() {
   return (
     <ConfirmProvider>
@@ -48,7 +44,7 @@ export default function RequestsPage() {
 }
 
 function RequestsScreen() {
-  const signedIn = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
+  const signedIn = useSyncExternalStore(subscribeToken, tokenState, () => null);
 
   useEffect(() => {
     if (signedIn === false) window.location.replace(BASE_PATH);

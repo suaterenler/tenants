@@ -11,13 +11,66 @@ export function readToken(): string | null {
   }
 }
 
-export function storeToken(token: string | null): void {
+function writeToken(token: string | null): void {
   try {
     if (token) window.sessionStorage.setItem(TOKEN_KEY, token);
     else window.sessionStorage.removeItem(TOKEN_KEY);
   } catch {
     return;
   }
+}
+
+export function storeToken(token: string | null): void {
+  writeToken(token);
+  if (!token) authChannel()?.postMessage({ type: "logout" });
+}
+
+const AUTH_CHANNEL = "erenler_tenants_auth";
+const ASK_WAIT_MS = 400;
+const tokenListeners = new Set<() => void>();
+let channel: BroadcastChannel | null = null;
+let askedAt = 0;
+
+function notifyToken(): void {
+  tokenListeners.forEach((listener) => listener());
+}
+
+function authChannel(): BroadcastChannel | null {
+  if (channel || typeof BroadcastChannel === "undefined") return channel;
+  channel = new BroadcastChannel(AUTH_CHANNEL);
+  channel.onmessage = (event: MessageEvent<{ type?: string; token?: string }>) => {
+    const data = event.data;
+    if (data?.type === "ask") {
+      const token = readToken();
+      if (token) channel?.postMessage({ type: "token", token });
+    } else if (data?.type === "token" && data.token && !readToken()) {
+      writeToken(data.token);
+      notifyToken();
+    } else if (data?.type === "logout" && readToken()) {
+      writeToken(null);
+      notifyToken();
+    }
+  };
+  return channel;
+}
+
+export function subscribeToken(callback: () => void): () => void {
+  tokenListeners.add(callback);
+  const bus = authChannel();
+  if (bus && !readToken() && !askedAt) {
+    askedAt = Date.now();
+    bus.postMessage({ type: "ask" });
+    window.setTimeout(notifyToken, ASK_WAIT_MS + 50);
+  }
+  return () => {
+    tokenListeners.delete(callback);
+  };
+}
+
+export function tokenState(): boolean | null {
+  if (readToken()) return true;
+  if (typeof BroadcastChannel !== "undefined" && (!askedAt || Date.now() - askedAt < ASK_WAIT_MS)) return null;
+  return false;
 }
 
 export class AdminRequestError extends Error {

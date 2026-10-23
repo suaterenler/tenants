@@ -32,7 +32,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 import { useRetained } from "@/lib/use-retained";
 import { CreateTenantDialog, CredentialsDialog, domainUrl, EMPTY_FORM, panelUrl, tenantAddress, type AppInfo, type Secret, type Tenant, type TenantForm } from "@/components/panel/tenant-create";
-import { adminFetch, AdminRequestError, authHeaders, BASE_PATH, readToken, storeToken, type ApiBody } from "@/lib/admin-client";
+import { adminFetch, AdminRequestError, type ApiBody, authHeaders, BASE_PATH, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
 import { excelDate, writeExcel, type ExcelCell } from "@/lib/excel";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/format";
 
@@ -129,7 +129,7 @@ function readResetToken(): string | null {
 }
 
 function AdminScreen() {
-  const stored = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
+  const stored = useSyncExternalStore(subscribeToken, tokenState, () => null);
   const initialReset = useSyncExternalStore(noopSubscribe, readResetToken, () => null);
   const [override, setSignedIn] = useState<boolean | null>(null);
   const [resetDone, setResetDone] = useState(false);

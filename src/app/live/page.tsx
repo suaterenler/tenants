@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, ExternalLink, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { AdminHeader } from "@/components/panel/admin-header";
 import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/header-filters";
-import { RelativeTimeChip } from "@/components/panel/relative-time-chip";
-import { inviteUrl, LiveSessionDialog, StatusPill } from "@/components/live/session-dialog";
+import { inviteUrl, LiveSessionDialog, STATUS_COLOR, StatusPill } from "@/components/live/session-dialog";
 import { enablePush } from "@/components/live/push";
 import { AppearanceDialog } from "@/components/live/appearance-dialog";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { adminFetch, authHeaders, BASE_PATH, readToken, sessionExpired, storeToken } from "@/lib/admin-client";
+import { adminFetch, authHeaders, BASE_PATH, sessionExpired, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { durationMinutes, emptyAppearance, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -58,10 +57,6 @@ const RING: [number, number][] = [
   [2.05, 880],
 ];
 const BEEP: [number, number][] = [[0, 1000]];
-
-function noopSubscribe(): () => void {
-  return () => undefined;
-}
 
 function readSoundPref(): boolean {
   try {
@@ -178,7 +173,7 @@ export default function LivePage() {
 }
 
 function LiveScreen() {
-  const signedIn = useSyncExternalStore(noopSubscribe, () => Boolean(readToken()), () => null);
+  const signedIn = useSyncExternalStore(subscribeToken, tokenState, () => null);
 
   useEffect(() => {
     if (signedIn === false) window.location.replace(BASE_PATH);
@@ -272,7 +267,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
     );
   }
 
-  const statusOptions = LIVE_STATUSES.filter((status) => status !== "waiting").map((status) => ({ value: status, label: t.live.statuses[status] }));
+  const statusOptions = LIVE_STATUSES.filter((status) => status !== "waiting").map((status) => ({ value: status, label: t.live.statuses[status], color: STATUS_COLOR[status] }));
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -706,7 +701,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {sortHead("createdAt", t.live.date, "min-w-56")}
+                  {sortHead("createdAt", t.live.date, "min-w-40")}
                   {sortHead("code", t.live.code, "w-28 min-w-28")}
                   {sortHead("name", t.live.name, "min-w-40")}
                   {sortHead("phone", t.live.phone, "min-w-36")}
@@ -767,14 +762,43 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                     const due = isReminderDue(item);
                     const people = guestCount(item);
                     return (
-                      <TableRow key={item.id} className="cursor-pointer" onClick={() => open(item)}>
+                      <TableRow key={item.id} className="group cursor-pointer" onClick={() => open(item)}>
                         <TableCell className="text-sm">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="tabular-nums">{formatDateTime(item.createdAt, locale)}</span>
-                            <RelativeTimeChip value={item.createdAt} />
-                          </div>
+                          <span className="tabular-nums">{formatDateTime(item.createdAt, locale)}</span>
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{item.inviteCode || "—"}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">
+                          {item.inviteCode ? (
+                            <span className="flex items-center gap-1">
+                              {item.inviteCode}
+                              <a
+                                href={`${BASE_PATH}/live/room/${item.inviteCode}`}
+                                target="_blank"
+                                rel="noopener"
+                                aria-label={t.live.openRoom}
+                                title={t.live.openRoom}
+                                className={cn(buttonVariants({ variant: "ghost", size: "icon-xs" }), "opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100")}
+                                onClick={(event) => event.stopPropagation()}
+                              >
+                                <ExternalLink className="size-3.5" />
+                              </a>
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                aria-label={t.live.copyLink}
+                                title={t.live.copyLink}
+                                className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void copyInvite(item.inviteCode);
+                                }}
+                              >
+                                <Copy className="size-3.5" />
+                              </Button>
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                         <TableCell className={cn("text-sm", item.isNew && "font-semibold")}>
                           <span className="flex items-center gap-2">
                             {item.isNew ? <span className="size-2 shrink-0 rounded-full bg-sky-500" /> : null}
@@ -844,11 +868,6 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                             {item.reminderAt && !item.reminderDone ? (
                               <Button variant="ghost" size="icon-sm" aria-label={t.live.markDone} title={t.live.markDone} onClick={() => void patchSession(item.id, { reminderDone: true })}>
                                 <Check className="size-4 text-emerald-600 dark:text-emerald-400" />
-                              </Button>
-                            ) : null}
-                            {item.inviteCode ? (
-                              <Button variant="ghost" size="icon-sm" aria-label={t.live.copyLink} title={t.live.copyLink} onClick={() => void copyInvite(item.inviteCode)}>
-                                <Copy className="size-4" />
                               </Button>
                             ) : null}
                           </div>

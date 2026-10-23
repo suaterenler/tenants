@@ -229,6 +229,7 @@ export const tr = {
     total: "{count} kayıt",
     date: "Tarih",
     code: "Kod",
+    openRoom: "Görüşmeyi yeni sekmede aç",
     name: "Ad Soyad",
     phone: "Telefon",
     email: "E-posta",

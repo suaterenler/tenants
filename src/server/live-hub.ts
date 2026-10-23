@@ -1,9 +1,9 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { LIVE_QUEUE_SECONDS, LIVE_ROOM_IDLE_HOURS, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
+import { LIVE_QUEUE_SECONDS, LIVE_ROOM_EMPTY_MINUTES, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
 import { secretMatches } from "./secret";
 import type { Emit } from "./sse";
-import { addParticipant, appendMessage, closeParticipant, expireWaiting, getSettings, updateSession } from "./live-store";
+import { addParticipant, appendMessage, closeParticipant, expireWaiting, getSettings, listSessions, updateSession } from "./live-store";
 
 export type MemberView = { peerId: string; name: string; role: LiveRole; muted: boolean; camera: boolean; connected: boolean };
 
@@ -37,6 +37,7 @@ type Hub = {
   requestTokens: Map<string, string>;
   requestWatchers: Map<string, Set<Emit>>;
   sweeper: ReturnType<typeof setInterval> | null;
+  orphans: Map<string, number>;
   onMissed: ((session: LiveSession) => void) | null;
 };
 
@@ -45,7 +46,7 @@ const globalHub = globalThis as typeof globalThis & { __erenlerLiveHub?: Hub };
 
 function hub(): Hub {
   if (!globalHub.__erenlerLiveHub) {
-    globalHub.__erenlerLiveHub = { rooms: new Map(), admins: new Set(), requestTokens: new Map(), requestWatchers: new Map(), sweeper: null, onMissed: null };
+    globalHub.__erenlerLiveHub = { rooms: new Map(), admins: new Set(), requestTokens: new Map(), requestWatchers: new Map(), sweeper: null, orphans: new Map(), onMissed: null };
   }
   const state = globalHub.__erenlerLiveHub;
   if (!state.sweeper) {
@@ -57,9 +58,36 @@ function hub(): Hub {
           state.onMissed?.(session);
         }
       });
+      void closeOrphans(state);
     }, 15_000);
   }
+  state.orphans ??= new Map();
   return state;
+}
+
+async function closeOrphans(state: Hub): Promise<void> {
+  const now = Date.now();
+  const sessions = await listSessions();
+  const seen = new Set<string>();
+  for (const session of sessions) {
+    if (session.status !== "active" || !session.inviteCode || state.rooms.has(session.inviteCode)) continue;
+    seen.add(session.id);
+    const first = state.orphans.get(session.id) ?? now;
+    state.orphans.set(session.id, first);
+    if (now - first < LIVE_ROOM_EMPTY_MINUTES * 60 * 1000) continue;
+    state.orphans.delete(session.id);
+    const updated = await updateSession(session.id, (item) => {
+      if (item.status !== "active") return;
+      const left = item.participants.map((entry) => entry.leftAt).filter((value): value is string => Boolean(value)).sort();
+      item.participants.forEach((entry) => {
+        entry.leftAt ??= new Date(now).toISOString();
+      });
+      item.status = "completed";
+      item.endedAt = left.at(-1) ?? new Date(now).toISOString();
+    });
+    if (updated) emitAdmin("session", updated);
+  }
+  for (const id of [...state.orphans.keys()]) if (!seen.has(id)) state.orphans.delete(id);
 }
 
 function token(): string {
@@ -287,7 +315,7 @@ async function removeMember(room: Room, member: Member, reason: string): Promise
   }
   if (admitted(room).length === 0) {
     if (room.idleTimer) clearTimeout(room.idleTimer);
-    room.idleTimer = setTimeout(() => void closeRoom(room, "idle"), LIVE_ROOM_IDLE_HOURS * 60 * 60 * 1000);
+    room.idleTimer = setTimeout(() => void closeRoom(room, "idle"), LIVE_ROOM_EMPTY_MINUTES * 60 * 1000);
   }
 }
 
