@@ -60,7 +60,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { BASE_PATH, adminFetch } from "@/lib/admin-client";
 import { formatBytes } from "@/lib/format";
-import { initials, isAllowedFile, LIVE_FILE_EXTENSIONS, LIVE_MAX_FILE_BYTES, type LiveRole } from "@/lib/live";
+import { initials, isAllowedFile, LIVE_EDIT_SECONDS, LIVE_FILE_EXTENSIONS, LIVE_MAX_FILE_BYTES, type LiveRole } from "@/lib/live";
 import { cn } from "@/lib/utils";
 
 type Quality = "good" | "weak" | "lost";
@@ -406,6 +406,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   const [unread, setUnread] = useState(0);
   const [preview, setPreview] = useState<RoomMessage | null>(null);
   const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [notes, setNotes] = useState(room.hostNotes);
   const [notesState, setNotesState] = useState<"idle" | "saving" | "saved">("idle");
@@ -598,8 +599,19 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     chatEnd.current?.scrollIntoView({ block: "end" });
   }, [room.messages.length, panel]);
 
+  const sharedRef = useRef(false);
+
   useEffect(() => {
-    if (sharer !== "me" && sharingLocal) {
+    if (!sharingLocal) {
+      sharedRef.current = false;
+      return;
+    }
+    if (sharer === "me") {
+      sharedRef.current = true;
+      return;
+    }
+    if (sharer !== null || sharedRef.current) {
+      sharedRef.current = false;
       screenRef.current?.getTracks().forEach((track) => track.stop());
       screenRef.current = null;
       client.setTracks({ screen: null });
@@ -834,13 +846,29 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     }
   }
 
+  function editable(entry: RoomMessage): boolean {
+    return mine(entry) && Boolean(entry.text) && !entry.file && Date.now() - Date.parse(entry.at) < LIVE_EDIT_SECONDS * 1000;
+  }
+
+  function startEdit(entry: RoomMessage) {
+    setEditingId(entry.id);
+    setDraft(entry.text);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft("");
+  }
+
   async function send() {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
     try {
-      await client.post({ kind: "chat", text });
+      if (editingId) await client.post({ kind: "edit", id: editingId, text });
+      else await client.post({ kind: "chat", text });
       setDraft("");
+      setEditingId(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t.failed);
     } finally {
@@ -875,7 +903,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
 
   async function copyInvite() {
     const ok = await copyText(`${inviteUrl(code, inviteBase)}${locale === "en" ? "?lang=en" : ""}`);
-    if (ok) toast.success(all.live.linkCopied);
+    if (ok) toast.success(all.live.linkCopied, { id: "live-link-copied" });
     else toast.error(t.failed);
   }
 
@@ -1361,10 +1389,18 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                         <span className="px-1 text-[11px] text-neutral-500">
                           {own ? t.you : entry.author} · {clock(entry.at)}
                           {isImage && entry.file ? ` · ${formatBytes(entry.file.size)}` : ""}
+                          {entry.editedAt ? ` · ${t.edited}` : ""}
                         </span>
                         {entry.text ? (
-                          <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", own ? "rounded-br-sm bg-sky-600 text-white" : "rounded-bl-sm bg-white/10")}>
-                            <LinkedText text={entry.text} />
+                          <span className="group/msg flex items-center gap-1">
+                            {own && editable(entry) ? (
+                              <button type="button" onClick={() => startEdit(entry)} className="rounded p-1 text-neutral-500 opacity-0 transition-opacity group-hover/msg:opacity-100 hover:text-white pointer-coarse:opacity-100" aria-label={t.edit} title={t.edit}>
+                                <Pencil className="size-3.5" />
+                              </button>
+                            ) : null}
+                            <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", own ? "rounded-br-sm bg-sky-600 text-white" : "rounded-bl-sm bg-white/10", editingId === entry.id && "ring-2 ring-sky-300")}>
+                              <LinkedText text={entry.text} />
+                            </span>
                           </span>
                         ) : null}
                         {isImage && entry.file ? (
@@ -1384,6 +1420,15 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                   })}
                   <div ref={chatEnd} />
                 </div>
+                {editingId ? (
+                  <div className="flex items-center gap-2 border-t border-white/10 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-200">
+                    <Pencil className="size-3.5 shrink-0" />
+                    <span className="min-w-0 flex-1">{t.editing}</span>
+                    <button type="button" onClick={cancelEdit} className="rounded p-0.5 hover:bg-white/10" aria-label={all.common.cancel} title={all.common.cancel}>
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ) : null}
                 <form
                   className="flex items-end gap-1.5 border-t border-white/10 p-2"
                   onSubmit={(event) => {
@@ -1415,6 +1460,15 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
                         void send();
+                      } else if (event.key === "Escape" && editingId) {
+                        event.preventDefault();
+                        cancelEdit();
+                      } else if (event.key === "ArrowUp" && !draft && !editingId) {
+                        const last = [...room.messages].reverse().find((entry) => mine(entry) && entry.text && !entry.file);
+                        if (last && editable(last)) {
+                          event.preventDefault();
+                          startEdit(last);
+                        }
                       }
                     }}
                   />

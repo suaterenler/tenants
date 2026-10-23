@@ -568,7 +568,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
 
   async function copyInvite(code: string) {
     await navigator.clipboard.writeText(inviteUrl(code, settings?.inviteBase ?? ""));
-    toast.success(t.live.linkCopied);
+    toast.success(t.live.linkCopied, { id: "live-link-copied" });
   }
 
   return (

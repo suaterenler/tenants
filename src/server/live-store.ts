@@ -188,6 +188,16 @@ export function appendMessage(id: string, message: Omit<LiveMessage, "id" | "at"
   });
 }
 
+export function editMessage(id: string, messageId: string, text: string, maxAgeMs: number): Promise<LiveMessage | null> {
+  return mutate((data) => {
+    const entry = data.sessions.find((item) => item.id === id)?.messages.find((item) => item.id === messageId);
+    if (!entry || !entry.text || Date.now() - Date.parse(entry.at) > maxAgeMs) return null;
+    entry.text = text;
+    entry.editedAt = new Date().toISOString();
+    return { ...entry };
+  });
+}
+
 export function expireWaiting(olderThanMs: number): Promise<LiveSession[]> {
   return mutate((data) => {
     const limit = Date.now() - olderThanMs;

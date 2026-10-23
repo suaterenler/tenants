@@ -240,6 +240,7 @@ export function LiveSessionDialog({
                           <span className="px-1 text-[11px] text-muted-foreground">
                             {message.role === "host" ? t.live.host : message.author} · {timeOf(message.at, locale)}
                             {message.file && isImageFile(message.file.url) ? ` · ${formatBytes(message.file.size, locale)}` : ""}
+                            {message.editedAt ? ` · ${t.live.room.edited}` : ""}
                           </span>
                           {message.text ? (
                             <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", message.role === "host" ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted")}>

@@ -1,9 +1,9 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
-import { LIVE_QUEUE_SECONDS, LIVE_ROOM_EMPTY_MINUTES, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
+import { LIVE_EDIT_SECONDS, LIVE_QUEUE_SECONDS, LIVE_ROOM_EMPTY_MINUTES, LIVE_WAIT_SECONDS, type LiveMessage, type LiveRole, type LiveSession, type LiveSettings } from "@/lib/live";
 import { secretMatches } from "./secret";
 import type { Emit } from "./sse";
-import { addParticipant, appendMessage, closeParticipant, expireWaiting, getSettings, listSessions, updateSession } from "./live-store";
+import { addParticipant, appendMessage, closeParticipant, editMessage, expireWaiting, getSettings, listSessions, updateSession } from "./live-store";
 
 export type MemberView = { peerId: string; name: string; role: LiveRole; muted: boolean; camera: boolean; connected: boolean };
 
@@ -29,6 +29,7 @@ type Room = {
   guestShare: boolean;
   idleTimer: ReturnType<typeof setTimeout> | null;
   passes?: Map<string, string>;
+  authors?: Map<string, string>;
 };
 
 type Hub = {
@@ -236,7 +237,9 @@ export async function joinRoom(session: LiveSession, input: { name: string; role
   const passes = passesOf(room);
   const passKey = input.role === "guest" && input.pass ? [...passes.keys()].find((key) => secretMatches(input.pass ?? "", key)) : undefined;
   const previous = passKey ? room.members.get(passes.get(passKey) ?? "") : undefined;
-  if (previous) await removeMember(room, previous, "left");
+  if (previous) {
+    await removeMember(room, previous, "left");
+  }
   const member: Member = {
     peerId: token().slice(0, 12),
     token: token(),
@@ -251,6 +254,7 @@ export async function joinRoom(session: LiveSession, input: { name: string; role
   };
   room.members.set(member.peerId, member);
   if (passKey) passes.set(passKey, member.peerId);
+  if (previous && room.authors) for (const [id, peerId] of room.authors) if (peerId === previous.peerId) room.authors.set(id, member.peerId);
   const needsApproval = input.role === "guest" && !input.trusted && !passKey && room.approveJoin && hosts(room).length > 0;
   if (needsApproval) {
     for (const host of hosts(room)) sendTo(host, "knock", { peerId: member.peerId, name: member.name });
@@ -352,7 +356,8 @@ export type RoomCommand =
   | { kind: "kick"; peerId: string }
   | { kind: "leave" }
   | { kind: "end" }
-  | { kind: "stats"; data: string };
+  | { kind: "stats"; data: string }
+  | { kind: "edit"; id: string; text: string };
 
 export async function command(code: string, member: Member, input: RoomCommand): Promise<{ ok: boolean; error?: string }> {
   const room = roomOf(code);
@@ -410,7 +415,16 @@ export async function command(code: string, member: Member, input: RoomCommand):
     case "chat": {
       const message = await appendMessage(room.sessionId, { author: member.name, role: member.role, text: input.text, file: input.file });
       if (!message) return { ok: false, error: "notFound" };
+      room.authors ??= new Map();
+      room.authors.set(message.id, member.peerId);
       broadcast(room, "chat", { ...message, peerId: member.peerId });
+      return { ok: true };
+    }
+    case "edit": {
+      if (room.authors?.get(input.id) !== member.peerId) return { ok: false, error: "forbidden" };
+      const message = await editMessage(room.sessionId, input.id, input.text, LIVE_EDIT_SECONDS * 1000);
+      if (!message) return { ok: false, error: "liveEditExpired" };
+      broadcast(room, "chat-edit", { id: message.id, text: message.text, editedAt: message.editedAt });
       return { ok: true };
     }
     case "rename": {

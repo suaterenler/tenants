@@ -153,6 +153,7 @@ export const tr = {
     liveNameRequired: "Lütfen adınızı yazın.",
     liveFileTooLarge: "Dosya en fazla 100 MB olabilir.",
     liveFileType: "Bu dosya türü gönderilemez. Resim, PDF, Office belgesi, metin, ZIP/RAR ve ses/video dosyaları gönderilebilir.",
+    liveEditExpired: "Mesaj artık düzenlenemez (3 dakika geçti).",
     liveBusy: "Şu an başka bir görüşmedesiniz. Önce o görüşmeyi bitirin.",
   },
   auth: {
@@ -344,6 +345,9 @@ export const tr = {
       send: "Gönder",
       attach: "Dosya ekle",
       dropFiles: "Dosyayı buraya bırakın",
+      editing: "Mesajı düzenliyorsunuz · Esc ile vazgeç",
+      edited: "düzenlendi",
+      edit: "Düzenle",
       quality: { good: "Bağlantı iyi", weak: "Bağlantı zayıf", lost: "Bağlantı yok" },
       reconnecting: "Bağlantı kesildi, yeniden bağlanılıyor…",
       hostLost: "Görüşme sahibinin bağlantısı koptu, lütfen bekleyin",

@@ -6,7 +6,9 @@ export type LiveRole = "host" | "guest";
 
 export type LiveParticipant = { name: string; role: LiveRole; joinedAt: string; leftAt: string | null; inviteCode: string };
 
-export type LiveMessage = { id: string; author: string; role: LiveRole; text: string; at: string; file?: { name: string; url: string; size: number } };
+export type LiveMessage = { id: string; author: string; role: LiveRole; text: string; at: string; editedAt?: string; file?: { name: string; url: string; size: number } };
+
+export const LIVE_EDIT_SECONDS = 180;
 
 export type LiveSession = {
   id: string;

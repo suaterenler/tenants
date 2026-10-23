@@ -27,6 +27,10 @@ function parse(body: Record<string, unknown>): RoomCommand | null {
           : undefined;
       return text || attachment ? { kind: "chat", text, file: attachment } : null;
     }
+    case "edit": {
+      const text = cleanMessage(body.text);
+      return typeof body.id === "string" && text ? { kind: "edit", id: body.id, text } : null;
+    }
     case "rename": {
       const name = cleanName(body.name);
       return name ? { kind: "rename", name } : null;

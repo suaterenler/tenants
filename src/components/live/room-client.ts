@@ -298,6 +298,11 @@ export class RoomClient {
         if (message.peerId !== this.state.selfId) this.onIncoming?.(message);
         return;
       }
+      case "chat-edit": {
+        const id = String(data.id);
+        this.set({ messages: this.state.messages.map((message) => (message.id === id ? { ...message, text: String(data.text), editedAt: String(data.editedAt) } : message)) });
+        return;
+      }
       case "rename":
         if (data.peerId === this.state.selfId) this.set({ selfName: String(data.name) });
         else this.patchPeer(String(data.peerId), { name: String(data.name) });
