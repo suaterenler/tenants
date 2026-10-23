@@ -114,6 +114,7 @@ export class RoomClient {
   private audioContext: AudioContext | null = null;
   private analysers = new Map<string, { analyser: AnalyserNode; source: MediaStreamAudioSourceNode; track: MediaStreamTrack }>();
   private levelTimer: ReturnType<typeof setInterval> | null = null;
+  private lastLoud = new Map<string, number>();
   private joinName = "";
   onIncoming: ((message: RoomMessage) => void) | null = null;
 
@@ -275,6 +276,7 @@ export class RoomClient {
         return;
       case "share":
         this.set({ sharer: typeof data.peerId === "string" ? data.peerId : null });
+        if (typeof data.peerId === "string") this.watchShareStats();
         return;
       case "settings":
         this.set({ approveJoin: data.approveJoin === true, guestShare: data.guestShare === true });
@@ -516,13 +518,15 @@ export class RoomClient {
         if (!entry) return peer;
         entry.analyser.getByteFrequencyData(data);
         const average = data.reduce((sum, value) => sum + value, 0) / data.length;
-        const speaking = !peer.muted && average / 60 > 0.15;
+        const now = Date.now();
+        if (!peer.muted && average / 60 > 0.15) this.lastLoud.set(peer.peerId, now);
+        const speaking = !peer.muted && now - (this.lastLoud.get(peer.peerId) ?? 0) < 900;
         if (speaking === peer.speaking) return peer;
         changed = true;
         return { ...peer, speaking };
       });
       if (changed) this.set({ peers });
-    }, 300);
+    }, 150);
   }
 
   async post(body: Record<string, unknown>): Promise<void> {
@@ -575,7 +579,51 @@ export class RoomClient {
     this.disposed = false;
   }
 
+  private shareStatsTimer: ReturnType<typeof setInterval> | null = null;
+
+  private watchShareStats() {
+    if (this.shareStatsTimer) clearInterval(this.shareStatsTimer);
+    let rounds = 0;
+    this.shareStatsTimer = setInterval(() => {
+      rounds += 1;
+      if (rounds > 12 || this.disposed || !this.state.sharer) {
+        if (this.shareStatsTimer) clearInterval(this.shareStatsTimer);
+        this.shareStatsTimer = null;
+        return;
+      }
+      void this.reportShareStats();
+    }, 5000);
+  }
+
+  private async reportShareStats() {
+    const sending = this.state.sharer === this.state.selfId;
+    const rows: Record<string, unknown>[] = [];
+    for (const [peerId, link] of this.links) {
+      const transceiver = link.pc.getTransceivers()[2];
+      if (!transceiver) continue;
+      const report = await (sending ? transceiver.sender.getStats() : transceiver.receiver.getStats()).catch(() => null);
+      const pair = await link.pc.getStats().catch(() => null);
+      const row: Record<string, unknown> = { peer: peerId, conn: link.pc.connectionState, track: sending ? Boolean(transceiver.sender.track) : transceiver.receiver.track.readyState + (transceiver.receiver.track.muted ? ":muted" : "") };
+      report?.forEach((entry: Record<string, unknown>) => {
+        if (entry.type === "outbound-rtp" || entry.type === "inbound-rtp") {
+          for (const key of ["bytesSent", "bytesReceived", "framesEncoded", "framesSent", "framesReceived", "framesDecoded", "keyFramesDecoded", "frameWidth", "frameHeight", "framesPerSecond", "packetsLost", "nackCount", "pliCount", "qualityLimitationReason", "targetBitrate"]) if (entry[key] !== undefined) row[key] = entry[key];
+        }
+      });
+      pair?.forEach((entry: Record<string, unknown>) => {
+        if (entry.type === "candidate-pair" && entry.nominated && entry.state === "succeeded") {
+          row.rtt = entry.currentRoundTripTime;
+          row.outgoing = entry.availableOutgoingBitrate;
+          const local = pair.get(String(entry.localCandidateId)) as Record<string, unknown> | undefined;
+          row.path = local ? `${String(local.candidateType)}/${String(local.protocol)}` : "";
+        }
+      });
+      rows.push(row);
+    }
+    if (rows.length > 0) void this.post({ kind: "stats", role: sending ? "sender" : "receiver", rows }).catch(() => undefined);
+  }
+
   dispose() {
+    if (this.shareStatsTimer) clearInterval(this.shareStatsTimer);
     this.disposed = true;
     this.stop();
     void this.audioContext?.close().catch(() => undefined);

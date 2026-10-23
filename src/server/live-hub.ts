@@ -351,7 +351,8 @@ export type RoomCommand =
   | { kind: "rename"; name: string }
   | { kind: "kick"; peerId: string }
   | { kind: "leave" }
-  | { kind: "end" };
+  | { kind: "end" }
+  | { kind: "stats"; data: string };
 
 export async function command(code: string, member: Member, input: RoomCommand): Promise<{ ok: boolean; error?: string }> {
   const room = roomOf(code);
@@ -434,6 +435,9 @@ export async function command(code: string, member: Member, input: RoomCommand):
       await removeMember(room, target, "kicked");
       return { ok: true };
     }
+    case "stats":
+      console.log(`[live-stats] ${code} ${member.role} ${member.name} ${input.data}`);
+      return { ok: true };
     case "leave":
       await removeMember(room, member, "left");
       return { ok: true };

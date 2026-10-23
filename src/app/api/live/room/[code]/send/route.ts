@@ -37,6 +37,8 @@ function parse(body: Record<string, unknown>): RoomCommand | null {
       return { kind: "leave" };
     case "end":
       return { kind: "end" };
+    case "stats":
+      return { kind: "stats", data: JSON.stringify({ role: body.role, rows: body.rows }).slice(0, 4000) };
     default:
       return null;
   }

@@ -192,6 +192,25 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+const LINK_PATTERN = /((?:https?:\/\/|www\.)[^\s<>"']*[^\s<>"'.,!?;:)])/gi;
+
+function LinkedText({ text }: { text: string }) {
+  const parts = text.split(LINK_PATTERN);
+  return (
+    <>
+      {parts.map((part, index) =>
+        index % 2 === 1 ? (
+          <a key={index} href={part.startsWith("www.") ? `https://${part}` : part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-80">
+            {part}
+          </a>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 function noopSubscribe(): () => void {
   return () => undefined;
 }
@@ -543,7 +562,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
       setLevel(value);
       const now = performance.now();
       if (value > 0.15) lastVoice = now;
-      const talking = now - lastVoice < 1500;
+      const talking = now - lastVoice < 600;
       if (talking !== selfTalking.current) {
         selfTalking.current = talking;
         if (talking) setActiveSpeaker("me");
@@ -560,9 +579,9 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }, [micId, client]);
 
   const speakingPeer = peers.find((peer) => peer.speaking)?.peerId ?? null;
-  const currentSpeaker = selfTalking.current ? "me" : (speakingPeer ?? activeSpeaker);
   const [lastRemote, setLastRemote] = useState<string | null>(null);
   if (speakingPeer && speakingPeer !== lastRemote) setLastRemote(speakingPeer);
+  const currentSpeaker = speakingPeer ?? (selfTalking.current ? "me" : (lastRemote && peers.some((peer) => peer.peerId === lastRemote) ? lastRemote : activeSpeaker));
 
   useEffect(() => {
     chatEnd.current?.scrollIntoView({ block: "end" });
@@ -589,6 +608,10 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }, [notes, role, room.sessionId, room.hostNotes]);
 
   const inviteBase = useInviteBase();
+  useEffect(() => {
+    effectRef.current?.setMirrorImage(facing !== "environment");
+  }, [facing, background]);
+
   const pipRef = useRef<HTMLVideoElement | null>(null);
   const [pipOn, setPipOn] = useState(false);
   const pipSupported = useSyncExternalStore(noopSubscribe, () => document.pictureInPictureEnabled === true, () => false);
@@ -736,6 +759,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     setBackgroundBusy(true);
     try {
       const effect = new BackgroundEffect();
+      effect.setMirrorImage(facing !== "environment");
       effectStream.current = await effect.start(source, mode);
       effectRef.current = effect;
       showLocal();
@@ -761,7 +785,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     if (someoneElseSharing && role !== "host") return;
     let stream: MediaStream;
     try {
-      const options: DisplayMediaStreamOptions & { selfBrowserSurface?: string } = { video: true, audio: false, selfBrowserSurface: "exclude" };
+      const options: DisplayMediaStreamOptions & { selfBrowserSurface?: string } = { video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 15, max: 15 } }, audio: false, selfBrowserSurface: "exclude" };
       stream = await navigator.mediaDevices.getDisplayMedia(options);
     } catch {
       return;
@@ -1284,7 +1308,11 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                         <span className="px-1 text-[11px] text-neutral-500">
                           {own ? t.you : entry.author} · {clock(entry.at)}
                         </span>
-                        {entry.text ? <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", own ? "rounded-br-sm bg-sky-600 text-white" : "rounded-bl-sm bg-white/10")}>{entry.text}</span> : null}
+                        {entry.text ? (
+                          <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", own ? "rounded-br-sm bg-sky-600 text-white" : "rounded-bl-sm bg-white/10")}>
+                            <LinkedText text={entry.text} />
+                          </span>
+                        ) : null}
                         {entry.file ? (
                           <a href={entry.file.url} target="_blank" rel="noreferrer" className={cn("flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:opacity-90", own ? "bg-sky-700 text-white" : "bg-white/10")}>
                             <FileText className="size-4 shrink-0" />

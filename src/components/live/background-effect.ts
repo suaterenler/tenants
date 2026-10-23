@@ -41,6 +41,7 @@ export class BackgroundEffect {
   private running = false;
   private lastTime = -1;
   private emptyFrames = 0;
+  private mirrorImage = true;
 
   constructor() {
     this.video.muted = true;
@@ -66,6 +67,28 @@ export class BackgroundEffect {
     const track = source.getVideoTracks()[0];
     this.video.srcObject = track ? new MediaStream([track]) : null;
     await this.video.play().catch(() => undefined);
+  }
+
+  private blurCache: { image: HTMLImageElement; canvas: HTMLCanvasElement } | null = null;
+
+  private blurredImage(image: HTMLImageElement): HTMLCanvasElement {
+    if (this.blurCache?.image === image) return this.blurCache.canvas;
+    const canvas = document.createElement("canvas");
+    const ratio = 24 / Math.max(image.naturalWidth, image.naturalHeight);
+    canvas.width = Math.max(2, Math.round(image.naturalWidth * ratio));
+    canvas.height = Math.max(2, Math.round(image.naturalHeight * ratio));
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      context.fillStyle = "rgba(0, 0, 0, 0.25)";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    this.blurCache = { image, canvas };
+    return canvas;
+  }
+
+  setMirrorImage(value: boolean) {
+    this.mirrorImage = value;
   }
 
   setMode(mode: BackgroundMode) {
@@ -181,10 +204,26 @@ export class BackgroundEffect {
     }
     if (mode.kind === "image" && this.image?.complete && this.image.naturalWidth > 0) {
       const image = this.image;
-      const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
-      const drawWidth = image.naturalWidth * scale;
-      const drawHeight = image.naturalHeight * scale;
-      ctx.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+      const cover = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+      const contain = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+      const draw = (source: CanvasImageSource, scale: number, sourceWidth: number, sourceHeight: number) => {
+        const drawWidth = sourceWidth * scale;
+        const drawHeight = sourceHeight * scale;
+        if (this.mirrorImage) {
+          ctx.save();
+          ctx.translate(width, 0);
+          ctx.scale(-1, 1);
+        }
+        ctx.drawImage(source, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+        if (this.mirrorImage) ctx.restore();
+      };
+      if (!mode.src.startsWith("data:") || contain / cover > 0.92) {
+        draw(image, cover, image.naturalWidth, image.naturalHeight);
+        return;
+      }
+      draw(image, contain, image.naturalWidth, image.naturalHeight);
+      const blurred = this.blurredImage(image);
+      draw(blurred, cover * (image.naturalWidth / blurred.width), blurred.width, blurred.height);
       return;
     }
     ctx.fillStyle = mode.kind === "color" ? mode.color : "#1f2937";
