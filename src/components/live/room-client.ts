@@ -176,6 +176,17 @@ export class RoomClient {
     }
   }
 
+  async check(): Promise<{ valid: boolean; hostName: string }> {
+    const response = await fetch(`${API}/${this.code}/join`, { cache: "no-store" }).catch(() => null);
+    if (!response) return { valid: true, hostName: "" };
+    if (response.status === 404 || response.status === 410) {
+      this.set({ phase: "closed", error: response.status === 404 ? "notFound" : "" });
+      return { valid: false, hostName: "" };
+    }
+    const payload = (await response.json().catch(() => null)) as { data?: { hostName?: string } } | null;
+    return { valid: true, hostName: payload?.data?.hostName ?? "" };
+  }
+
   async join(name: string): Promise<void> {
     this.joinName = name;
     this.set({ phase: "joining", error: "" });

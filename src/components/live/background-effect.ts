@@ -41,6 +41,7 @@ export class BackgroundEffect {
   private running = false;
   private lastTime = -1;
   private emptyFrames = 0;
+  private detected = false;
   private mirrorImage = true;
 
   constructor() {
@@ -158,8 +159,9 @@ export class BackgroundEffect {
       if (values[index] > 0.5) person += 1;
     }
     result.close();
+    if (person >= values.length * 0.01) this.detected = true;
     this.emptyFrames = person < values.length * 0.01 ? this.emptyFrames + 1 : 0;
-    if (this.emptyFrames > 15) {
+    if (!this.detected && this.emptyFrames > 45) {
       ctx.drawImage(video, 0, 0, width, height);
       return;
     }

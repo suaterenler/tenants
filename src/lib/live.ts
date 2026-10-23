@@ -95,7 +95,13 @@ export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "ema
 export const LIVE_WAIT_SECONDS = 60;
 export const LIVE_QUEUE_SECONDS = 10 * 60;
 export const LIVE_ROOM_EMPTY_MINUTES = 3;
-export const LIVE_MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const LIVE_MAX_FILE_BYTES = 100 * 1024 * 1024;
+export const LIVE_FILE_EXTENSIONS = ["png", "jpg", "jpeg", "gif", "webp", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "txt", "csv", "rtf", "zip", "rar", "7z", "mp3", "m4a", "wav", "mp4", "mov", "webm"];
+
+export function isAllowedFile(name: string): boolean {
+  const match = /\.([a-z0-9]{1,8})$/i.exec(name);
+  return Boolean(match && LIVE_FILE_EXTENSIONS.includes(match[1].toLowerCase()));
+}
 
 function text(value: unknown, max: number): string {
   return typeof value === "string" ? value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, max) : "";

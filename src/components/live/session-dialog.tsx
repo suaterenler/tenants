@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
-import { CalendarClock, Check, Copy, ExternalLink, Globe, Mail, MessageSquare, Paperclip, Phone, RotateCcw, Trash2, Users, Video } from "lucide-react";
+import { CalendarClock, Check, Copy, ExternalLink, Globe, Mail, MessageSquare, Phone, RotateCcw, Trash2, Users, Video } from "lucide-react";
 import { useI18n } from "@/components/i18n-provider";
+import { FileIcon, isImageFile, LinkedText } from "@/components/live/linked-text";
 import { useConfirm } from "@/components/panel/confirm-dialog";
 import { DatePicker } from "@/components/panel/date-picker";
 import { Field } from "@/components/panel/field";
@@ -10,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
 import { durationMinutes, formatPhone, initials, isValidPhone, type LiveSession, type LiveSessionPatch, type LiveStatus, previousSessions } from "@/lib/live";
 import { cn } from "@/lib/utils";
 
@@ -237,11 +239,21 @@ export function LiveSessionDialog({
                         <div key={message.id} className={cn("flex max-w-[85%] flex-col gap-0.5", message.role === "host" ? "self-end items-end" : "self-start")}>
                           <span className="px-1 text-[11px] text-muted-foreground">
                             {message.role === "host" ? t.live.host : message.author} · {timeOf(message.at, locale)}
+                            {message.file && isImageFile(message.file.url) ? ` · ${formatBytes(message.file.size, locale)}` : ""}
                           </span>
-                          {message.text ? <span className={cn("rounded-2xl px-3 py-2 text-sm", message.role === "host" ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted")}>{message.text}</span> : null}
-                          {message.file ? (
+                          {message.text ? (
+                            <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", message.role === "host" ? "rounded-br-sm bg-primary text-primary-foreground" : "rounded-bl-sm bg-muted")}>
+                              <LinkedText text={message.text} />
+                            </span>
+                          ) : null}
+                          {message.file && isImageFile(message.file.url) ? (
+                            <a href={message.file.url} target="_blank" rel="noreferrer" className="block w-fit overflow-hidden rounded-xl hover:opacity-90" title={message.file.name}>
+                              <Image src={message.file.url} alt={message.file.name} width={480} height={320} unoptimized className="h-auto max-h-48 w-auto max-w-full object-contain" />
+                            </a>
+                          ) : null}
+                          {message.file && !isImageFile(message.file.url) ? (
                             <a href={message.file.url} target="_blank" rel="noreferrer" className={cn("inline-flex max-w-full items-center gap-1.5 rounded-xl border px-3 py-2 text-sm text-primary underline-offset-4 hover:underline", message.role === "host" ? "self-end" : "self-start")}>
-                              <Paperclip className="size-4 shrink-0" />
+                              <FileIcon name={message.file.name} />
                               <span className="truncate">{message.file.name}</span>
                               <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{Math.max(1, Math.round(message.file.size / 1024))} KB</span>
                             </a>

@@ -4,6 +4,15 @@ import { findByCode, getSettings } from "@/server/live-store";
 import { iceServers, startLiveJobs } from "@/server/live-support";
 import { cleanName, isInviteCode } from "@/lib/live";
 
+export async function GET(_request: Request, context: { params: Promise<{ code: string }> }) {
+  const code = (await context.params).code.toUpperCase();
+  if (!isInviteCode(code)) return fail("notFound", 404);
+  const session = await findByCode(code);
+  if (!session) return fail("notFound", 404);
+  if (session.status !== "active") return fail("liveClosed", 410);
+  return ok({ active: true, hostName: (await getSettings()).hostName });
+}
+
 export async function POST(request: Request, context: { params: Promise<{ code: string }> }) {
   startLiveJobs();
   const code = (await context.params).code.toUpperCase();

@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { adminFetch, authHeaders, BASE_PATH, sessionExpired, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
+import { adminFetch, AdminRequestError, authHeaders, BASE_PATH, sessionExpired, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
 import { excelDate, writeExcel, type ExcelCell } from "@/lib/excel";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { durationMinutes, emptyAppearance, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
@@ -374,7 +374,15 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       setSettings(payload as LiveSettings);
     } else if (name === "busy") {
       setInCall((payload as { busy?: boolean }).busy === true);
+    } else if (name === "removed") {
+      const id = (payload as { id?: string }).id;
+      if (id) dropSession(id);
     }
+  }
+
+  function dropSession(id: string) {
+    setItems((current) => current.filter((item) => item.id !== id));
+    setSelectedId((current) => (current === id ? null : current));
   }
 
   useEffect(() => {
@@ -525,8 +533,11 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       const session = await adminFetch<LiveSession>(`/live/sessions/${id}/open`, { method: "POST" });
       upsert(session);
       openRoom(session.inviteCode);
-    } catch {
-      toast.error(t.live.actionFailed);
+    } catch (error) {
+      if (error instanceof AdminRequestError && error.status === 404) {
+        dropSession(id);
+        toast.error(t.live.sessionGone);
+      } else toast.error(t.live.actionFailed);
     }
   }
 

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fail, ok } from "@/server/auth";
 import { memberByToken, sessionIdOf } from "@/server/live-hub";
 import { dataDir } from "@/server/live-store";
-import { LIVE_MAX_FILE_BYTES } from "@/lib/live";
+import { isAllowedFile, LIVE_MAX_FILE_BYTES } from "@/lib/live";
 
 function safeName(name: string): string {
   const base = path.basename(name).replace(/[^\p{L}\p{N}._ -]/gu, "_").trim();
@@ -21,6 +21,7 @@ export async function POST(request: Request, context: { params: Promise<{ code: 
   if (!(file instanceof File) || file.size === 0) return fail("invalidRecord", 400);
   if (file.size > LIVE_MAX_FILE_BYTES) return fail("liveFileTooLarge", 413);
   const name = safeName(file.name);
+  if (!isAllowedFile(name)) return fail("liveFileType", 415);
   const stored = `${randomUUID()}${path.extname(name).toLowerCase().slice(0, 10)}`;
   const folder = path.join(dataDir(), "live-files", sessionId);
   await mkdir(folder, { recursive: true });

@@ -7,7 +7,6 @@ import {
   Check,
   ChevronUp,
   Copy,
-  FileText,
   ImagePlus,
   LayoutGrid,
   LayoutPanelLeft,
@@ -45,10 +44,12 @@ import {
   WifiOff,
   X,
 } from "lucide-react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { BackgroundEffect, type BackgroundMode } from "@/components/live/background-effect";
 import { inviteUrl, useInviteBase } from "@/components/live/invite";
+import { FileIcon, isImageFile, LinkedText } from "@/components/live/linked-text";
 import { RequestAgain } from "@/components/live/request-again";
 import { HttpError, RoomClient, type RemotePeer, type RoomMessage, type RoomState } from "@/components/live/room-client";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { BASE_PATH, adminFetch } from "@/lib/admin-client";
 import { formatBytes } from "@/lib/format";
-import { initials, type LiveRole } from "@/lib/live";
+import { initials, isAllowedFile, LIVE_FILE_EXTENSIONS, LIVE_MAX_FILE_BYTES, type LiveRole } from "@/lib/live";
 import { cn } from "@/lib/utils";
 
 type Quality = "good" | "weak" | "lost";
@@ -192,25 +193,6 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-const LINK_PATTERN = /((?:https?:\/\/|www\.)[^\s<>"']*[^\s<>"'.,!?;:)])/gi;
-
-function LinkedText({ text }: { text: string }) {
-  const parts = text.split(LINK_PATTERN);
-  return (
-    <>
-      {parts.map((part, index) =>
-        index % 2 === 1 ? (
-          <a key={index} href={part.startsWith("www.") ? `https://${part}` : part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:opacity-80">
-            {part}
-          </a>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
 function noopSubscribe(): () => void {
   return () => undefined;
 }
@@ -235,14 +217,19 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
   const [room, setRoom] = useState<RoomState>(client.state);
   const [nameDraft, setNameDraft] = useState("");
   const [nameError, setNameError] = useState(false);
+  const [hostName, setHostName] = useState("");
 
   useEffect(() => {
     const unsubscribe = client.subscribe(() => setRoom(client.state));
     const timer = window.setTimeout(() => {
       client.revive();
       const name = role === "guest" && !requestToken ? readName() : "";
-      if (role === "guest" && !requestToken && !name) setRoom({ ...client.state, phase: "name" });
-      else void client.join(name);
+      if (role === "guest" && !requestToken && !name) {
+        void client.check().then((result) => {
+          setHostName(result.hostName);
+          if (result.valid) setRoom({ ...client.state, phase: "name" });
+        });
+      } else void client.join(name);
     }, 0);
     const unload = () => client.leaveOnUnload();
     window.addEventListener("pagehide", unload);
@@ -323,6 +310,14 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
               <Video className="size-7" />
             </span>
             <h1 className="text-xl font-semibold">{t.namePrompt}</h1>
+            {hostName ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-neutral-300">
+                <span className="flex size-7 items-center justify-center rounded-full bg-sky-700 text-xs font-semibold text-white">{initials(hostName)}</span>
+                <span>
+                  {t.hostLabel} <strong className="font-semibold text-white">{hostName}</strong>
+                </span>
+              </div>
+            ) : null}
             <div className="flex flex-col gap-1.5 text-left">
               <label htmlFor="live-join-name" className="text-sm text-neutral-300">
                 {t.nameLabel}
@@ -371,6 +366,11 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
           {t.backToSite}
         </Button>
       ) : null}
+      {role === "guest" && !embedded ? (
+        <a href="https://erenleryazilim.com" target="_blank" rel="noopener" className="text-xs text-neutral-500 hover:text-neutral-300">
+          {t.poweredBy}
+        </a>
+      ) : null}
     </div>
   );
 }
@@ -415,6 +415,10 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   const [pinned, setPinned] = useState<string | null>(null);
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null);
   const [background, setBackground] = useState<BackgroundMode>({ kind: "none" });
+  const backgroundRef = useRef<BackgroundMode>(background);
+  useEffect(() => {
+    backgroundRef.current = background;
+  }, [background]);
   const [backgroundBusy, setBackgroundBusy] = useState(false);
   const [audioBlocked, setAudioBlocked] = useState(false);
   const [sharingLocal, setSharingLocal] = useState(false);
@@ -466,7 +470,14 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         setBlocked(false);
         stream.getAudioTracks().forEach((track) => (track.enabled = micOn));
         stream.getVideoTracks().forEach((track) => (track.enabled = camOn));
-        if (effectRef.current && effectStream.current) await effectRef.current.setSource(stream);
+        const nextFacing = stream.getVideoTracks()[0]?.getSettings().facingMode ?? facingMode ?? "";
+        if (effectRef.current && effectStream.current) {
+          effectRef.current.stop();
+          const effect = new BackgroundEffect();
+          effect.setMirrorImage(nextFacing !== "environment");
+          effectStream.current = await effect.start(stream, backgroundRef.current);
+          effectRef.current = effect;
+        }
         showLocal();
         client.setTracks({ audio: stream.getAudioTracks()[0] ?? null });
         pushVideo();
@@ -478,7 +489,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         });
         setMicId(stream.getAudioTracks()[0]?.getSettings().deviceId ?? "");
         setCamId(stream.getVideoTracks()[0]?.getSettings().deviceId ?? "");
-        setFacing(stream.getVideoTracks()[0]?.getSettings().facingMode ?? "");
+        setFacing(nextFacing);
       } catch {
         setBlocked(true);
         setCamOn(false);
@@ -608,6 +619,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }, [notes, role, room.sessionId, room.hostNotes]);
 
   const inviteBase = useInviteBase();
+  const [dragging, setDragging] = useState(false);
   useEffect(() => {
     effectRef.current?.setMirrorImage(facing !== "environment");
   }, [facing, background]);
@@ -836,8 +848,20 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     }
   }
 
+  async function sendFiles(files: File[]) {
+    for (const file of files.slice(0, 5)) await sendFile(file);
+  }
+
   async function sendFile(file: File | undefined) {
     if (!file) return;
+    if (!isAllowedFile(file.name)) {
+      toast.error(all.errors.liveFileType);
+      return;
+    }
+    if (file.size > LIVE_MAX_FILE_BYTES) {
+      toast.error(all.errors.liveFileTooLarge);
+      return;
+    }
     setSending(true);
     try {
       const uploaded = await client.upload(file);
@@ -908,19 +932,24 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         {icon}
       </button>
     );
-    const pin = tileButton(pinned === id ? t.unpin : t.pin, () => togglePin(id), pinned === id ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />, pinned === id ? "opacity-100" : "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100");
+    const pin = tileButton(pinned === id ? t.unpin : t.pin, () => togglePin(id), pinned === id ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />, cn(pinned === id ? "opacity-100" : "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100", small && "size-6"));
     if (id === "me") {
       return (
         <div className="group/tile relative size-full">
           <SelfTile videoRef={attachLocal} name={me} camOn={camOn} mirror={facing !== "environment"} micOn={micOn} blocked={blocked} level={level} small={small} youLabel={t.you} blockedText={t.cameraBlocked} host={role === "host"} hostLabel={t.host} />
-          {small && touch ? null : (
+          {small ? (
+            <div className={cn("absolute top-1.5 left-1.5 z-10 flex items-center gap-1", role === "host" ? "right-9" : "right-1.5")}>
+              {touch ? null : pin}
+              <NameTag compact name={me === t.you ? me : `${me} (${t.you})`} muted={!micOn} />
+            </div>
+          ) : (
             <div className="absolute top-2 left-2 z-10 flex gap-1">
               {pin}
               {tileButton(t.rename, () => setRenaming(me), <Pencil className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100")}
             </div>
           )}
           {touch && camOn && !blocked ? (
-            <div className={cn("absolute z-10 flex", small ? "top-1.5 left-1.5 gap-1" : "right-2 bottom-2 gap-1.5")}>
+            <div className={cn("absolute z-10 flex", small ? "right-1.5 bottom-1.5 gap-1" : "right-2 bottom-2 gap-1.5")}>
               {backgroundMenu(
                 <button type="button" title={t.bg} aria-label={t.bg} className={cn("inline-flex items-center justify-center rounded-full bg-black/60 text-white", small ? "size-8" : "size-9", background.kind !== "none" && "bg-sky-600")}>
                   {backgroundBusy ? <Loader2 className="size-4 animate-spin" /> : <WandSparkles className="size-4" />}
@@ -937,9 +966,10 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     return (
       <div className="group/tile relative size-full">
         <PeerTile peer={peer} small={small} hostLost={room.hostLost} speakerId={speakerId} onAudioBlocked={() => setAudioBlocked(true)} t={t} />
-        <div className="absolute top-2 left-2 z-10 flex gap-1">
+        <div className={cn("absolute z-10 flex items-center gap-1", small ? cn("top-1.5 left-1.5", peer.role === "host" ? "right-9" : "right-1.5") : "top-2 left-2")}>
           {pin}
-          {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, "opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100 hover:bg-red-600") : null}
+          {role === "host" && peer.role !== "host" ? tileButton(t.kick, () => askKick(peer), <UserMinus className="size-3.5" />, cn("opacity-0 group-hover/tile:opacity-100 pointer-coarse:opacity-100 hover:bg-red-600", small && "size-6")) : null}
+          {small ? <NameTag compact name={peer.name} muted={peer.muted} /> : null}
         </div>
       </div>
     );
@@ -1288,7 +1318,29 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
         </main>
 
         {panel ? (
-          <aside className="fixed inset-x-0 top-14 bottom-16 z-20 flex flex-col border-white/10 bg-neutral-900 sm:static sm:w-80 sm:border-l lg:w-96">
+          <aside
+            className="fixed inset-x-0 top-14 bottom-16 z-20 flex flex-col border-white/10 bg-neutral-900 sm:relative sm:inset-auto sm:z-auto sm:w-80 sm:border-l lg:w-96"
+            onDragOver={(event) => {
+              if (panel !== "chat" || !event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+            }}
+            onDrop={(event) => {
+              if (panel !== "chat") return;
+              event.preventDefault();
+              setDragging(false);
+              void sendFiles([...event.dataTransfer.files]);
+            }}
+          >
+            {dragging && panel === "chat" ? (
+              <div className="pointer-events-none absolute inset-2 z-30 flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-sky-400 bg-neutral-900/90 text-sm text-sky-200">
+                <Paperclip className="size-6" />
+                {t.dropFiles}
+              </div>
+            ) : null}
             <div className="flex items-center justify-between border-b border-white/10 px-3 py-2">
               <span className="flex items-center gap-2 text-sm font-medium">
                 {panel === "chat" ? <MessageSquare className="size-4" /> : <NotebookPen className="size-4" />}
@@ -1303,19 +1355,26 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                 <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3">
                   {room.messages.map((entry) => {
                     const own = mine(entry);
+                    const isImage = Boolean(entry.file && isImageFile(entry.file.url));
                     return (
                       <div key={entry.id} className={cn("flex max-w-[85%] flex-col gap-0.5", own ? "items-end self-end" : "self-start")}>
                         <span className="px-1 text-[11px] text-neutral-500">
                           {own ? t.you : entry.author} · {clock(entry.at)}
+                          {isImage && entry.file ? ` · ${formatBytes(entry.file.size)}` : ""}
                         </span>
                         {entry.text ? (
                           <span className={cn("rounded-2xl px-3 py-2 text-sm break-words whitespace-pre-wrap", own ? "rounded-br-sm bg-sky-600 text-white" : "rounded-bl-sm bg-white/10")}>
                             <LinkedText text={entry.text} />
                           </span>
                         ) : null}
-                        {entry.file ? (
+                        {isImage && entry.file ? (
+                          <a href={entry.file.url} target="_blank" rel="noreferrer" className="block w-fit overflow-hidden rounded-xl hover:opacity-90" title={entry.file.name}>
+                            <Image src={entry.file.url} alt={entry.file.name} width={480} height={320} unoptimized className="h-auto max-h-56 w-auto max-w-full object-contain" onLoad={() => chatEnd.current?.scrollIntoView({ block: "end" })} />
+                          </a>
+                        ) : null}
+                        {entry.file && !isImage ? (
                           <a href={entry.file.url} target="_blank" rel="noreferrer" className={cn("flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:opacity-90", own ? "bg-sky-700 text-white" : "bg-white/10")}>
-                            <FileText className="size-4 shrink-0" />
+                            <FileIcon name={entry.file.name} />
                             <span className="min-w-0 truncate">{entry.file.name}</span>
                             <span className="shrink-0 text-xs opacity-70">{formatBytes(entry.file.size)}</span>
                           </a>
@@ -1338,6 +1397,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                   <input
                     ref={fileRef}
                     type="file"
+                    accept={LIVE_FILE_EXTENSIONS.map((extension) => `.${extension}`).join(",")}
                     className="hidden"
                     onChange={(event) => {
                       void sendFile(event.target.files?.[0]);
@@ -1588,10 +1648,10 @@ function DeviceButton({
   );
 }
 
-function NameTag({ name, muted }: { name: string; muted: boolean }) {
+function NameTag({ name, muted, compact }: { name: string; muted: boolean; compact?: boolean }) {
   return (
-    <span className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5 rounded-md bg-black/60 px-2 py-1 text-xs font-medium backdrop-blur" title={name}>
-      {muted ? <MicOff className="size-3.5 shrink-0 text-red-400" /> : <Mic className="size-3.5 shrink-0 text-emerald-400" />}
+    <span className={cn("flex items-center rounded-md bg-black/60 font-medium backdrop-blur", compact ? "min-w-0 gap-1 px-1.5 py-0.5 text-[10px]" : "absolute bottom-2 left-2 max-w-[calc(100%-1rem)] gap-1.5 px-2 py-1 text-xs")} title={name}>
+      {muted ? <MicOff className={cn("shrink-0 text-red-400", compact ? "size-3" : "size-3.5")} /> : <Mic className={cn("shrink-0 text-emerald-400", compact ? "size-3" : "size-3.5")} />}
       <span className="truncate">{name}</span>
     </span>
   );
@@ -1635,7 +1695,7 @@ function SelfTile({
         </div>
       ) : null}
       {host ? <HostStar label={hostLabel} small={small} /> : null}
-      <NameTag name={name === youLabel ? name : `${name} (${youLabel})`} muted={!micOn} />
+      {small ? null : <NameTag name={name === youLabel ? name : `${name} (${youLabel})`} muted={!micOn} />}
     </div>
   );
 }
@@ -1682,7 +1742,7 @@ function PeerTile({ peer, small, hostLost, speakerId, onAudioBlocked, t }: { pee
           {!small ? <span className="text-sm font-medium">{failed ? t.peerFailed : peer.role === "host" && hostLost ? t.hostLost : t.reconnecting}</span> : null}
         </div>
       ) : null}
-      <NameTag name={peer.name} muted={peer.muted} />
+      {small ? null : <NameTag name={peer.name} muted={peer.muted} />}
     </div>
   );
 }
