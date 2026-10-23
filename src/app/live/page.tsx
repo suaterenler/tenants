@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, ExternalLink, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, Download, ExternalLink, MessageSquare, PhoneCall, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { AdminHeader } from "@/components/panel/admin-header";
 import { ConfirmProvider, useConfirm } from "@/components/panel/confirm-dialog";
 import { HeaderDateRange, HeaderSelect, HeaderText } from "@/components/panel/header-filters";
-import { inviteUrl, LiveSessionDialog, STATUS_COLOR, StatusPill } from "@/components/live/session-dialog";
+import { inviteUrl } from "@/components/live/invite";
+import { LiveSessionDialog, STATUS_COLOR, StatusPill } from "@/components/live/session-dialog";
 import { enablePush } from "@/components/live/push";
 import { AppearanceDialog } from "@/components/live/appearance-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { adminFetch, authHeaders, BASE_PATH, sessionExpired, storeToken, subscribeToken, tokenState } from "@/lib/admin-client";
+import { excelDate, writeExcel, type ExcelCell } from "@/lib/excel";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { durationMinutes, emptyAppearance, initials, isReminderDue, LIVE_STATUSES, liveBadgeCount, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -195,7 +197,9 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [settings, setSettings] = useState<LiveSettings | null>(null);
   const [inCall, setInCall] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [hostDraft, setHostDraft] = useState<string | null>(null);
+  const [inviteDraft, setInviteDraft] = useState<string | null>(null);
   const [soundReady, setSoundReady] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [sound, setSound] = useState(readSoundPref);
@@ -206,6 +210,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [filters, setFilters] = useState<TextFilters>({ code: "", name: "", phone: "", email: "" });
   const [statusFilter, setStatusFilter] = useState("");
   const [dates, setDates] = useState({ from: "", to: "" });
+  const [reminderDates, setReminderDates] = useState({ from: "", to: "" });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const seenRef = useRef<Set<string>>(new Set());
@@ -219,6 +224,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const mode: SiteMode = visibility === "hidden" || (visibility === "available" && !available) ? "hidden" : available ? "available" : "request";
   const siteState = mode === "hidden" ? t.live.siteHidden : mode === "available" ? (inCall ? t.live.siteBusy : t.live.availableOn) : t.live.availableOff;
   const waiting = items.filter((item) => item.status === "waiting");
+  const callbacks = items.filter((item) => item.status === "request" || (item.isNew && item.status === "missed"));
   const reminders = items.filter((item) => isReminderDue(item));
   const selected = items.find((item) => item.id === selectedId) ?? null;
 
@@ -234,6 +240,10 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       const day = item.createdAt.slice(0, 10);
       if (dates.from && day < dates.from) return false;
       if (dates.to && day > dates.to) return false;
+      const reminderDay = item.reminderAt?.slice(0, 10) ?? "";
+      if ((reminderDates.from || reminderDates.to) && !reminderDay) return false;
+      if (reminderDates.from && reminderDay < reminderDates.from) return false;
+      if (reminderDates.to && reminderDay > reminderDates.to) return false;
       return true;
     });
     const direction = sortDir === "asc" ? 1 : -1;
@@ -245,7 +255,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       const result = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), "tr", { numeric: true, sensitivity: "base" });
       return result * direction;
     });
-  }, [items, tab, filters, statusFilter, dates, sort, sortDir]);
+  }, [items, tab, filters, statusFilter, dates, reminderDates, sort, sortDir]);
 
   function toggleSort(key: SessionSort) {
     if (sort === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -304,6 +314,28 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       next[index] = session;
       return next;
     });
+  }
+
+  async function refresh() {
+    setLoading(true);
+    await Promise.all([reload(), new Promise((resolve) => setTimeout(resolve, 400))]);
+  }
+
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const date = (value: string | null): ExcelCell => (value ? (excelDate(value) ?? value) : "");
+      await writeExcel({
+        fileName: `gorusmeler-${new Date().toISOString().slice(0, 10)}.xlsx`,
+        sheetName: t.live.title,
+        header: [t.live.date, t.live.code, t.live.name, t.live.phone, t.live.email, t.live.status, t.live.duration, t.live.participants, t.live.reminder, t.live.note, t.live.page],
+        rows: filtered.map((item) => [date(item.createdAt), item.inviteCode, item.name, item.phone, item.email, t.live.statuses[item.status], durationMinutes(item) ?? "", guestCount(item) || "", date(item.reminderAt), item.note, item.page]),
+      });
+    } catch {
+      toast.error(t.live.actionFailed);
+    } finally {
+      setExporting(false);
+    }
   }
 
   async function reload() {
@@ -407,6 +439,16 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
       toast.success(t.live.hostNameSaved);
     } catch {
       toast.error(t.live.saveFailed);
+    }
+  }
+
+  async function saveInviteBase() {
+    if (inviteDraft === null) return;
+    try {
+      await saveSettings({ inviteBase: inviteDraft.trim() });
+      setInviteDraft(null);
+    } catch {
+      return;
     }
   }
 
@@ -514,7 +556,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   }
 
   async function copyInvite(code: string) {
-    await navigator.clipboard.writeText(inviteUrl(code));
+    await navigator.clipboard.writeText(inviteUrl(code, settings?.inviteBase ?? ""));
     toast.success(t.live.linkCopied);
   }
 
@@ -529,7 +571,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
           <Card className={cn("overflow-hidden border-2 transition-colors", available ? "border-emerald-500/50" : "border-transparent")}>
             <CardContent className="flex flex-col gap-4 p-4">
               <div className="flex flex-col gap-3">
@@ -593,6 +635,27 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                 </div>
                 <span className="text-xs text-muted-foreground">{t.live.hostNameHint}</span>
               </div>
+              <div className="flex flex-col gap-1.5 border-t pt-3 text-sm">
+                <label htmlFor="live-invite-base" className="font-medium">
+                  {t.live.inviteBase}
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    id="live-invite-base"
+                    value={inviteDraft ?? settings?.inviteBase ?? ""}
+                    disabled={!settings}
+                    maxLength={200}
+                    placeholder={settings ? `${window.location.origin}${BASE_PATH}/live/join` : undefined}
+                    onChange={(event) => setInviteDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void saveInviteBase();
+                    }}
+                  />
+                  <Button variant="secondary" disabled={inviteDraft === null || inviteDraft.trim() === (settings?.inviteBase ?? "")} onClick={() => void saveInviteBase()}>
+                    {t.common.save}
+                  </Button>
+                </div>
+              </div>
               <div className="grid gap-2 border-t pt-3 text-sm">
                 <div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-3 py-2">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -627,7 +690,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
           </Card>
 
           <div className="flex min-h-36 flex-col gap-3">
-            {waiting.length === 0 ? (
+            {waiting.length === 0 && callbacks.length === 0 ? (
               <Card className="flex-1 border-dashed">
                 <CardContent className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                   <span className="flex size-11 items-center justify-center rounded-full bg-muted">
@@ -652,7 +715,14 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                         <span className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
                           <span className="tabular-nums">{t.live.incomingWaiting.replace("{seconds}", String(seconds))}</span>
                           <span className="truncate">{t.live.incomingFrom.replace("{page}", item.page)}</span>
+                          {item.phone ? <span className="tabular-nums">{item.phone}</span> : null}
                         </span>
+                        {item.note ? (
+                          <span className="mt-1 flex items-start gap-1.5 text-sm">
+                            <MessageSquare className="mt-0.5 size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                            <span className="line-clamp-2 whitespace-pre-line">{item.note}</span>
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex w-full gap-2 sm:w-auto [&>button]:flex-1 sm:[&>button]:flex-none">
                         <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => void reject(item)}>
@@ -669,6 +739,44 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                 );
               })
             )}
+            {callbacks.map((item) => (
+              <Card key={item.id} className="overflow-hidden border-2 border-amber-500/50 bg-gradient-to-r from-amber-500/10 via-transparent to-transparent">
+                <CardContent className="flex flex-wrap items-center gap-4 p-4">
+                  <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-amber-500 text-base font-semibold text-white">{item.name ? initials(item.name) : <MessageSquare className="size-5" />}</span>
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-400">{item.status === "missed" ? (item.phone || item.note ? t.live.callbackMissedTitle : t.live.missedTitle) : t.live.callbackTitle}</span>
+                    <span className="truncate text-lg font-semibold">{item.name || t.live.anonymous}</span>
+                    <span className="flex flex-wrap gap-x-3 text-sm text-muted-foreground">
+                      <span className="tabular-nums">{formatDateTime(item.createdAt, locale)}</span>
+                      {item.phone ? <span className="tabular-nums">{item.phone}</span> : null}
+                    </span>
+                    {item.note ? <span className="mt-1 line-clamp-2 text-sm">{item.note}</span> : null}
+                  </div>
+                  <div className="flex w-full gap-2 sm:w-auto [&>*]:flex-1 sm:[&>*]:flex-none">
+                    {item.status === "request" ? (
+                      <Button variant="outline" onClick={() => void patchSession(item.id, { status: "completed" })}>
+                        <Check className="size-4" />
+                        {t.live.callbackDone}
+                      </Button>
+                    ) : (
+                      <Button variant="outline" onClick={() => void patchSession(item.id, { isNew: false })}>
+                        <Check className="size-4" />
+                        {t.live.callbackSeen}
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => open(item)}>
+                      {t.live.callbackDetail}
+                    </Button>
+                    {item.phone ? (
+                      <Button className="bg-emerald-600 text-white hover:bg-emerald-700" render={<a href={`tel:${item.phone.replace(/[^\d+]/g, "")}`} />}>
+                        <PhoneCall className="size-4" />
+                        {t.live.callbackCall}
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
 
@@ -690,9 +798,13 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
           {reminders.length > 0 ? (
             <span className="text-sm text-amber-700 dark:text-amber-400">{t.live.remindersToday.replace("{count}", String(reminders.length))}</span>
           ) : null}
-          <Button variant="outline" className="ml-auto" disabled={loading} onClick={() => void reload()} aria-label={t.tenants.refresh} title={t.tenants.refresh}>
+          <Button variant="outline" className="ml-auto" disabled={loading} onClick={() => void refresh()} aria-label={t.tenants.refresh} title={t.tenants.refresh}>
             <RefreshCw className={cn("size-4", loading && "animate-spin")} />
             {t.tenants.refresh}
+          </Button>
+          <Button variant="outline" disabled={exporting || filtered.length === 0} onClick={() => void exportExcel()}>
+            {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            {t.tenants.export}
           </Button>
         </div>
 
@@ -733,12 +845,14 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                   </TableHead>
                   <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" />
                   <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" />
-                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" />
+                  <TableHead className="h-auto bg-muted/40 py-1.5 font-normal">
+                    <HeaderDateRange from={reminderDates.from} to={reminderDates.to} onChange={(from, to) => setReminderDates({ from, to })} future />
+                  </TableHead>
                   <TableHead className="h-auto bg-muted/40 py-1.5 font-normal" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading && items.length === 0 ? (
+                {loading ? (
                   <TableRow>
                     <TableCell colSpan={10} className="py-10 text-center text-muted-foreground">
                       <span className="flex flex-col items-center gap-2">
@@ -769,7 +883,9 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                         <TableCell className="font-mono text-xs text-muted-foreground">
                           {item.inviteCode ? (
                             <span className="flex items-center gap-1">
-                              {item.inviteCode}
+                              <a href={`${BASE_PATH}/live/room/${item.inviteCode}`} target="_blank" rel="noopener" className="hover:text-foreground hover:underline" title={t.live.openRoom} onClick={(event) => event.stopPropagation()}>
+                                {item.inviteCode}
+                              </a>
                               <a
                                 href={`${BASE_PATH}/live/room/${item.inviteCode}`}
                                 target="_blank"
@@ -880,9 +996,11 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
             </Table>
           </CardContent>
         </Card>
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{t.live.total.replace("{count}", String(filtered.length))}</span>
-        </div>
+        {filtered.length > 1 ? (
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <span>{t.live.total.replace("{count}", String(filtered.length))}</span>
+          </div>
+        ) : null}
       </main>
 
       <AppearanceDialog open={appearanceOpen} value={settings?.appearance ?? emptyAppearance()} onClose={() => setAppearanceOpen(false)} onSave={(appearance) => saveSettings({ appearance })} />

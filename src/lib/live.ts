@@ -43,7 +43,19 @@ export const LIVE_THEMES: LiveTheme[] = ["auto", "light", "dark"];
 
 export type LiveAppearance = { color: string; buttonColor: string; colorDark: string; buttonColorDark: string; theme: LiveTheme; tr: LiveTexts; en: LiveTexts };
 
-export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; visibility: LiveVisibility; appearance: LiveAppearance };
+export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; inviteBase: string; visibility: LiveVisibility; appearance: LiveAppearance };
+
+export function cleanInviteBase(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/\/+$/, "");
+  if (!trimmed) return "";
+  if (trimmed.length > 200 || !/^https?:\/\/[^\s/?#]+(\/[^\s?#]*)?$/i.test(trimmed)) return null;
+  return trimmed;
+}
+
+export function buildInviteUrl(code: string, base: string, origin: string, basePath: string): string {
+  return base ? `${base}/${code}` : `${origin}${basePath}/live/join/${code}`;
+}
 
 export function emptyTexts(): LiveTexts {
   return { title: "", subOn: "", subOff: "", startNow: "", requestCall: "" };
@@ -78,7 +90,7 @@ export function parseAppearance(value: unknown): LiveAppearance | null {
   return { color, buttonColor, colorDark, buttonColorDark, theme, tr: cleanTexts(source.tr), en: cleanTexts(source.en) };
 }
 
-export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "email" | "hostNotes" | "reminderAt" | "reminderDone" | "isNew">>;
+export type LiveSessionPatch = Partial<Pick<LiveSession, "name" | "phone" | "email" | "hostNotes" | "reminderAt" | "reminderDone" | "isNew">> & { status?: "completed" };
 
 export const LIVE_WAIT_SECONDS = 60;
 export const LIVE_QUEUE_SECONDS = 10 * 60;
@@ -165,6 +177,10 @@ export function parseSessionPatch(body: Record<string, unknown>): LiveSessionPat
   if ("isNew" in body) {
     if (typeof body.isNew !== "boolean") return null;
     patch.isNew = body.isNew;
+  }
+  if ("status" in body) {
+    if (body.status !== "completed") return null;
+    patch.status = "completed";
   }
   return patch;
 }

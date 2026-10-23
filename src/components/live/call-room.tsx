@@ -48,7 +48,8 @@ import {
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { BackgroundEffect, type BackgroundMode } from "@/components/live/background-effect";
-import { inviteUrl } from "@/components/live/session-dialog";
+import { inviteUrl, useInviteBase } from "@/components/live/invite";
+import { RequestAgain } from "@/components/live/request-again";
 import { HttpError, RoomClient, type RemotePeer, type RoomMessage, type RoomState } from "@/components/live/room-client";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -260,6 +261,13 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
 
   if (room.phase === "live") return <LiveRoom client={client} room={room} code={code} t={t} />;
 
+  const retryButton = (
+    <Button variant="secondary" className="h-10" onClick={() => window.location.reload()}>
+      <RefreshCw className="size-4" />
+      {t.retry}
+    </Button>
+  );
+
   const icon =
     room.phase === "ended" ? <Check className="size-7" /> : room.phase === "kicked" || room.phase === "denied" ? <Ban className="size-7" /> : room.phase === "closed" || room.phase === "error" ? <WifiOff className="size-7" /> : <Loader2 className="size-7 animate-spin" />;
   const title =
@@ -270,7 +278,9 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
         : room.phase === "denied"
           ? t.denied
           : room.phase === "closed"
-            ? t.closed
+            ? room.error === "notFound"
+              ? t.invalidLink
+              : t.closed
             : room.phase === "error"
               ? t.failed
               : room.phase === "pending"
@@ -280,8 +290,8 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
                   : t.joining;
 
   return (
-    <div className="dark flex min-h-dvh items-center justify-center bg-neutral-950 p-6 text-neutral-100">
-      <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-8 text-center">
+    <div className="dark flex min-h-dvh flex-col items-center justify-center gap-4 bg-neutral-950 p-6 text-neutral-100">
+      <div className={cn("flex w-full flex-col items-center gap-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-center sm:p-8", role === "guest" && !embedded && (room.phase === "ended" || (room.phase === "closed" && room.error !== "notFound")) ? "max-w-sm sm:max-w-xl" : "max-w-sm")}>
         {room.phase === "name" ? (
           <form
             className="flex w-full flex-col gap-4"
@@ -322,27 +332,26 @@ export function CallRoom({ role, code }: { role: LiveRole; code: string }) {
             <h1 className="text-xl font-semibold">{title}</h1>
             {room.phase === "ended" ? <p className="text-sm text-neutral-400">{t.endedHint}</p> : null}
             {room.error && room.phase === "error" ? <p className="text-sm text-neutral-400">{room.error}</p> : null}
-            <p className="font-mono text-xs text-neutral-500">{code}</p>
+            <p className="rounded-md bg-white/5 px-3 py-1 font-mono text-base tracking-wider text-neutral-300">{code}</p>
             {role === "host" && (room.phase === "ended" || room.phase === "closed") ? (
               <Button variant="secondary" render={<a href={`${BASE_PATH}/live`} />}>
                 {all.live.title}
               </Button>
-            ) : room.phase === "error" || room.phase === "closed" ? (
-              <Button variant="secondary" onClick={() => window.location.reload()}>
-                <RefreshCw className="size-4" />
-                {t.retry}
-              </Button>
-            ) : null}
-            {role === "guest" && (terminal || room.phase === "error") ? (
-              <Button className="bg-sky-600 text-white hover:bg-sky-700" onClick={backToSite}>
-                <ArrowLeft className="size-4" />
-                {t.backToSite}
-              </Button>
+            ) : role === "guest" && !embedded && (room.phase === "ended" || (room.phase === "closed" && room.error !== "notFound")) ? (
+              <RequestAgain />
+            ) : room.phase === "error" ? (
+              retryButton
             ) : null}
             {role === "guest" && terminal && embedded ? <p className="text-xs text-neutral-500">{t.autoClose}</p> : null}
           </>
         )}
       </div>
+      {role === "guest" && room.phase !== "name" && (terminal || room.phase === "error") ? (
+        <Button variant="ghost" className="text-neutral-300 hover:text-white" onClick={backToSite}>
+          <ArrowLeft className="size-4" />
+          {t.backToSite}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -579,6 +588,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
     return () => window.clearTimeout(timer);
   }, [notes, role, room.sessionId, room.hostNotes]);
 
+  const inviteBase = useInviteBase();
   const pipRef = useRef<HTMLVideoElement | null>(null);
   const [pipOn, setPipOn] = useState(false);
   const pipSupported = useSyncExternalStore(noopSubscribe, () => document.pictureInPictureEnabled === true, () => false);
@@ -816,7 +826,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
   }
 
   async function copyInvite() {
-    const ok = await copyText(`${inviteUrl(code)}${locale === "en" ? "?lang=en" : ""}`);
+    const ok = await copyText(`${inviteUrl(code, inviteBase)}${locale === "en" ? "?lang=en" : ""}`);
     if (ok) toast.success(all.live.linkCopied);
     else toast.error(t.failed);
   }
@@ -1046,7 +1056,7 @@ function LiveRoom({ client, room, code, t }: { client: RoomClient; room: RoomSta
                 </div>
                 <p className="text-xs text-neutral-400">{t.inviteHint}</p>
                 <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5">
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{inviteUrl(code).replace(/^https?:\/\/[^/]+/, "…")}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-xs">{inviteUrl(code, inviteBase).replace(/^https?:\/\/[^/]+/, "…")}</span>
                   <Button size="xs" variant="secondary" onClick={() => void copyInvite()}>
                     <Copy className="size-3" />
                     {all.tenants.copy}

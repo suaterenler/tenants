@@ -69,7 +69,7 @@ class HttpError extends Error {
   }
 }
 
-async function readEvents(response: Response, onEvent: (event: string, data: unknown) => void): Promise<void> {
+export async function readEvents(response: Response, onEvent: (event: string, data: unknown) => void): Promise<void> {
   const reader = response.body?.getReader();
   if (!reader) return;
   const decoder = new TextDecoder();
@@ -191,7 +191,7 @@ export class RoomClient {
     const payload = (await response.json().catch(() => null)) as { ok: boolean; data?: JoinResponse; error?: string; code?: string } | null;
     if (!payload?.ok || !payload.data) {
       const code = payload?.code ?? "";
-      this.set({ phase: code === "liveNameRequired" ? "name" : response.status === 410 || response.status === 404 ? "closed" : "error", error: payload?.error ?? "" });
+      this.set({ phase: code === "liveNameRequired" ? "name" : response.status === 410 || response.status === 404 ? "closed" : "error", error: response.status === 404 ? "notFound" : (payload?.error ?? "") });
       return;
     }
     const data = payload.data;

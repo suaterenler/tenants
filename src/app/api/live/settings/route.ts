@@ -1,7 +1,7 @@
 import { fail, ok, readBody, requireSession } from "@/server/auth";
 import { emitAdmin, hostInCall } from "@/server/live-hub";
 import { getSettings, updateSettings } from "@/server/live-store";
-import { cleanName, LIVE_VISIBILITIES, parseAppearance, type LiveSettings, type LiveVisibility } from "@/lib/live";
+import { cleanInviteBase, cleanName, LIVE_VISIBILITIES, parseAppearance, type LiveSettings, type LiveVisibility } from "@/lib/live";
 
 export async function GET(request: Request) {
   const denied = await requireSession(request);
@@ -21,6 +21,11 @@ export async function PUT(request: Request) {
     const hostName = cleanName(body.hostName);
     if (!hostName) return fail("liveNameRequired", 400);
     patch.hostName = hostName;
+  }
+  if (body.inviteBase !== undefined) {
+    const inviteBase = cleanInviteBase(body.inviteBase);
+    if (inviteBase === null) return fail("invalidRecord", 400);
+    patch.inviteBase = inviteBase;
   }
   if (body.visibility !== undefined) {
     if (typeof body.visibility !== "string" || !LIVE_VISIBILITIES.includes(body.visibility as LiveVisibility)) return fail("invalidRecord", 400);

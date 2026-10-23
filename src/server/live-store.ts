@@ -7,7 +7,7 @@ import { emptyAppearance, inviteCode, parseAppearance, type LiveMessage, type Li
 type LiveData = { settings: LiveSettings; sessions: LiveSession[] };
 
 function defaultSettings(): LiveSettings {
-  return { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım", visibility: "always", appearance: emptyAppearance() };
+  return { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım", inviteBase: "", visibility: "always", appearance: emptyAppearance() };
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -137,7 +137,12 @@ export function updateSession(id: string, change: (session: LiveSession, data: L
 
 export function patchSession(id: string, patch: LiveSessionPatch): Promise<LiveSession | null> {
   return updateSession(id, (session) => {
-    Object.assign(session, patch);
+    const { status, ...rest } = patch;
+    Object.assign(session, rest);
+    if (status === "completed" && (session.status === "request" || session.status === "missed")) {
+      session.status = "completed";
+      session.isNew = false;
+    }
     if (patch.reminderAt !== undefined) session.reminderMailedAt = null;
   });
 }

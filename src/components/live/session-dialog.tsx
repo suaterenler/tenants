@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { BASE_PATH } from "@/lib/admin-client";
 import { formatDateTime } from "@/lib/format";
 import { durationMinutes, formatPhone, initials, isValidPhone, type LiveSession, type LiveSessionPatch, type LiveStatus, previousSessions } from "@/lib/live";
 import { cn } from "@/lib/utils";
@@ -32,12 +31,6 @@ export const STATUS_COLOR: Record<LiveStatus, string> = {
   missed: "#64748b",
   rejected: "#ef4444",
 };
-
-export function inviteUrl(code: string): string {
-  if (typeof window === "undefined") return `/meet/${code}`;
-  const short = window.location.hostname.endsWith("erenleryazilim.com");
-  return short ? `${window.location.origin}/meet/${code}` : `${window.location.origin}${BASE_PATH}/live/join/${code}`;
-}
 
 export function StatusPill({ status }: { status: LiveStatus }) {
   const t = useI18n().messages;
