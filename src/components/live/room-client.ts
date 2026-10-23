@@ -394,6 +394,7 @@ export class RoomClient {
       link.timer = null;
       this.patchPeer(peerId, { rtc: "connected" });
       this.tuneSenders(link.pc);
+      this.watchAudio(peerId, link);
       return;
     }
     if (state === "disconnected" || state === "failed") {
@@ -593,6 +594,45 @@ export class RoomClient {
 
   revive() {
     this.disposed = false;
+  }
+
+  private audioWatched = new Set<RTCPeerConnection>();
+
+  private watchAudio(peerId: string, link: Link) {
+    if (this.audioWatched.has(link.pc)) return;
+    this.audioWatched.add(link.pc);
+    for (const delay of [5000, 20000, 60000]) setTimeout(() => void this.reportAudio(peerId, link), delay);
+  }
+
+  private async reportAudio(peerId: string, link: Link) {
+    if (this.disposed || link.pc.connectionState === "closed") return;
+    const transceiver = link.pc.getTransceivers()[0];
+    if (!transceiver) return;
+    const row: Record<string, unknown> = {
+      peer: peerId,
+      conn: link.pc.connectionState,
+      dir: transceiver.currentDirection,
+      micTrack: transceiver.sender.track ? `${transceiver.sender.track.readyState}/${transceiver.sender.track.enabled ? "on" : "off"}` : "none",
+      remoteTrack: `${transceiver.receiver.track.readyState}${transceiver.receiver.track.muted ? "/muted" : ""}`,
+      contextState: this.audioContext?.state ?? "none",
+    };
+    const sent = await transceiver.sender.getStats().catch(() => null);
+    sent?.forEach((entry: Record<string, unknown>) => {
+      if (entry.type === "outbound-rtp") row.bytesSent = entry.bytesSent;
+      if (entry.type === "media-source") row.micLevel = entry.audioLevel;
+    });
+    const received = await transceiver.receiver.getStats().catch(() => null);
+    received?.forEach((entry: Record<string, unknown>) => {
+      if (entry.type === "inbound-rtp") {
+        row.bytesReceived = entry.bytesReceived;
+        row.remoteLevel = entry.audioLevel;
+        row.concealed = entry.concealedSamples;
+      }
+    });
+    const players = [...document.querySelectorAll("video")].filter((video) => !video.muted && video.srcObject);
+    row.players = players.map((video) => `${video.paused ? "paused" : "playing"}${video.isConnected ? "" : "/detached"}`).join(",");
+    row.ua = navigator.userAgent.slice(0, 120);
+    void this.post({ kind: "stats", role: "audio", rows: [row] }).catch(() => undefined);
   }
 
   private shareStatsTimer: ReturnType<typeof setInterval> | null = null;
