@@ -9,6 +9,7 @@ export type LiveParticipant = { name: string; role: LiveRole; joinedAt: string; 
 export type LiveMessage = { id: string; author: string; role: LiveRole; text: string; at: string; editedAt?: string; file?: { name: string; url: string; size: number } };
 
 export const LIVE_EDIT_SECONDS = 180;
+export const LIVE_DELETED_KEEP_DAYS = 10;
 
 export type LiveSession = {
   id: string;
@@ -28,6 +29,7 @@ export type LiveSession = {
   reminderDone: boolean;
   reminderMailedAt: string | null;
   isNew: boolean;
+  deletedAt?: string | null;
   page: string;
 };
 

@@ -92,17 +92,17 @@ export function updateSettings(patch: Partial<LiveSettings>): Promise<LiveSettin
 
 export async function listSessions(): Promise<LiveSession[]> {
   await queue;
-  return (await readData()).sessions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return (await readData()).sessions.filter((session) => !session.deletedAt).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getSession(id: string): Promise<LiveSession | null> {
   await queue;
-  return (await readData()).sessions.find((session) => session.id === id) ?? null;
+  return (await readData()).sessions.find((session) => session.id === id && !session.deletedAt) ?? null;
 }
 
 export async function findByCode(code: string): Promise<LiveSession | null> {
   await queue;
-  return (await readData()).sessions.find((session) => session.inviteCode === code) ?? null;
+  return (await readData()).sessions.find((session) => session.inviteCode === code && !session.deletedAt) ?? null;
 }
 
 function uniqueCode(sessions: LiveSession[]): string {
@@ -155,9 +155,20 @@ export function ensureCode(id: string): Promise<LiveSession | null> {
 
 export function deleteSession(id: string): Promise<boolean> {
   return mutate((data) => {
-    const before = data.sessions.length;
-    data.sessions = data.sessions.filter((session) => session.id !== id);
-    return data.sessions.length !== before;
+    const session = data.sessions.find((item) => item.id === id && !item.deletedAt);
+    if (!session) return false;
+    session.deletedAt = new Date().toISOString();
+    session.isNew = false;
+    return true;
+  });
+}
+
+export function purgeDeleted(olderThanMs: number): Promise<string[]> {
+  return mutate((data) => {
+    const limit = Date.now() - olderThanMs;
+    const purged = data.sessions.filter((session) => session.deletedAt && Date.parse(session.deletedAt) < limit).map((session) => session.id);
+    if (purged.length > 0) data.sessions = data.sessions.filter((session) => !purged.includes(session.id));
+    return purged;
   });
 }
 
@@ -203,7 +214,7 @@ export function expireWaiting(olderThanMs: number): Promise<LiveSession[]> {
     const limit = Date.now() - olderThanMs;
     const expired: LiveSession[] = [];
     for (const session of data.sessions) {
-      if (session.status === "waiting" && new Date(session.createdAt).getTime() < limit) {
+      if (!session.deletedAt && session.status === "waiting" && new Date(session.createdAt).getTime() < limit) {
         session.status = "missed";
         session.isNew = true;
         expired.push({ ...session });
@@ -218,7 +229,7 @@ export function dueReminders(now: Date): Promise<LiveSession[]> {
     const today = now.toISOString().slice(0, 10);
     const due: LiveSession[] = [];
     for (const session of data.sessions) {
-      if (!session.reminderAt || session.reminderDone) continue;
+      if (session.deletedAt || !session.reminderAt || session.reminderDone) continue;
       if (session.reminderMailedAt?.slice(0, 10) === today) continue;
       if (session.reminderAt.slice(0, 10) > today) continue;
       session.reminderMailedAt = now.toISOString();

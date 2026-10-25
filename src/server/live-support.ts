@@ -1,9 +1,11 @@
 import "server-only";
 import { createHmac } from "node:crypto";
-import type { LiveSession } from "@/lib/live";
+import { rm } from "node:fs/promises";
+import path from "node:path";
+import { LIVE_DELETED_KEEP_DAYS, type LiveSession } from "@/lib/live";
 import { adminEmail, publicUrl, sendMail } from "./mail";
 import { adminOnline, setMissedHandler } from "./live-hub";
-import { dueReminders } from "./live-store";
+import { dataDir, dueReminders, purgeDeleted } from "./live-store";
 import { sendPush } from "./live-push";
 
 export type IceServer = { urls: string | string[]; username?: string; credential?: string };
@@ -129,4 +131,11 @@ export function startLiveJobs(): void {
   };
   globalState.__erenlerLiveReminders = setInterval(run, 15 * 60 * 1000);
   run();
+  const purge = () => {
+    void purgeDeleted(LIVE_DELETED_KEEP_DAYS * 24 * 60 * 60 * 1000).then(async (ids) => {
+      for (const id of ids) if (/^[0-9a-f-]{36}$/.test(id)) await rm(path.join(dataDir(), "live-files", id), { recursive: true, force: true }).catch(() => undefined);
+    });
+  };
+  setInterval(purge, 60 * 60 * 1000);
+  purge();
 }

@@ -272,7 +272,7 @@ export const en: Messages = {
     previous: "Previous calls with this person",
     reopen: "Reopen call",
     callBack: "Start call",
-    deleteConfirm: "Permanently delete this call record?",
+    deleteConfirm: "Delete this call record? It leaves the list now and is permanently deleted with its chat files and images after 10 days.",
     deleted: "Call record deleted",
     saved: "Call saved",
     settingsSaved: "Setting saved",

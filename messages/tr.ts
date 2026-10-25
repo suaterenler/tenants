@@ -270,7 +270,7 @@ export const tr = {
     previous: "Bu kişiyle önceki görüşmeler",
     reopen: "Görüşmeyi yeniden aç",
     callBack: "Görüşme başlat",
-    deleteConfirm: "Bu görüşme kaydı kalıcı olarak silinsin mi?",
+    deleteConfirm: "Bu görüşme kaydı silinsin mi? Kayıt hemen listeden kalkar; sohbet dosyaları ve resimlerle birlikte 10 gün sonra kalıcı olarak silinir.",
     deleted: "Görüşme kaydı silindi",
     saved: "Görüşme kaydedildi",
     settingsSaved: "Ayar kaydedildi",
