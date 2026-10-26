@@ -1311,7 +1311,7 @@ textarea{resize:vertical;min-height:80px}
       style.id = "erenler-live-offset";
       document.head.appendChild(style);
     }
-    style.textContent = bannerOn && !suppressed() ? "body{padding-top:" + (basePad + banner.offsetHeight) + "px !important}" : "";
+    style.textContent = bannerOn && !suppressed() ? ":root{--erenler-live-offset:" + banner.offsetHeight + "px}body{padding-top:" + (basePad + banner.offsetHeight) + "px !important}" : "";
   }
 
   function syncFab() {
