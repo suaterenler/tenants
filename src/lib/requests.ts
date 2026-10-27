@@ -138,7 +138,7 @@ export type RequestPatch = { status?: RequestStatus; note?: string; tenantApp?: 
 const TENANT_CODE_PATTERN = /^[a-z0-9-]{1,40}$/;
 
 export const PRODUCT_PROGRAMS: Record<string, string> = { "egitim-yonetim-sistemi": "education", "kuafor-programi": "salon", "e-ticaret": "ecommerce", "web-sitesi": "cms" };
-export const TRIAL_DAYS = 7;
+export const TRIAL_DAYS = 15;
 
 export function programForProduct(product: string): string {
   return PRODUCT_PROGRAMS[product] ?? "";

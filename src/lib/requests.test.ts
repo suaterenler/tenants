@@ -9,7 +9,7 @@ import { secretMatches } from "../server/secret";
 const valid = {
   source: "cms",
   formSlug: "deneme",
-  formName: "7 Gün Ücretsiz Dene",
+  formName: "15 Gün Ücretsiz Dene",
   submissionId: 12,
   submittedAt: "2026-10-04T10:00:00Z",
   locale: "tr",
@@ -149,9 +149,9 @@ describe("trial helpers", () => {
     expect(programNameForProduct("xyz", programs)).toBe("xyz");
   });
 
-  it("adds seven days", () => {
-    expect(trialExpiry(new Date(2026, 9, 4))).toBe("2026-10-11");
-    expect(trialExpiry(new Date(2026, 11, 28))).toBe("2027-01-04");
+  it("adds fifteen days", () => {
+    expect(trialExpiry(new Date(2026, 9, 4))).toBe("2026-10-19");
+    expect(trialExpiry(new Date(2026, 11, 28))).toBe("2027-01-12");
   });
 });
 
