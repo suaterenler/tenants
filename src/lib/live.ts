@@ -47,7 +47,36 @@ export const LIVE_THEMES: LiveTheme[] = ["auto", "light", "dark"];
 
 export type LiveAppearance = { color: string; buttonColor: string; colorDark: string; buttonColorDark: string; theme: LiveTheme; tr: LiveTexts; en: LiveTexts };
 
-export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; inviteBase: string; visibility: LiveVisibility; appearance: LiveAppearance };
+export type LiveSettings = { available: boolean; approveJoin: boolean; guestShare: boolean; hostName: string; inviteBase: string; visibility: LiveVisibility; appearance: LiveAppearance; autoOffAt: string; availableSince: string | null };
+
+export const LIVE_TIME_ZONE = "Europe/Istanbul";
+
+export function cleanTime(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(trimmed) ? trimmed : null;
+}
+
+function zonedParts(date: Date, timeZone: string): { day: string; time: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return { day: `${part("year")}-${part("month")}-${part("day")}`, time: `${part("hour")}:${part("minute")}` };
+}
+
+function nextDay(day: string): string {
+  return new Date(Date.parse(`${day}T00:00:00.000Z`) + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+export function isAutoOffDue(settings: Pick<LiveSettings, "available" | "autoOffAt" | "availableSince">, now: Date, timeZone: string = LIVE_TIME_ZONE): boolean {
+  if (!settings.available || !settings.autoOffAt || !settings.availableSince) return false;
+  const since = new Date(settings.availableSince);
+  if (Number.isNaN(since.getTime())) return false;
+  const start = zonedParts(since, timeZone);
+  const cutoffDay = start.time < settings.autoOffAt ? start.day : nextDay(start.day);
+  const current = zonedParts(now, timeZone);
+  return current.day > cutoffDay || (current.day === cutoffDay && current.time >= settings.autoOffAt);
+}
 
 export function cleanInviteBase(value: unknown): string | null {
   if (typeof value !== "string") return null;

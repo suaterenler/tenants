@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, Download, ExternalLink, MessageSquare, PhoneCall, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX } from "lucide-react";
+import { ArrowDown, ArrowUp, Bell, BellRing, CalendarClock, Check, ChevronsUpDown, Copy, Download, ExternalLink, MessageSquare, PhoneCall, EyeOff, Loader2, Palette, PhoneIncoming, PhoneOff, RefreshCw, Users, Video, Volume2, VolumeX, X } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/components/i18n-provider";
 import { AdminHeader } from "@/components/panel/admin-header";
@@ -200,6 +200,7 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
   const [exporting, setExporting] = useState(false);
   const [hostDraft, setHostDraft] = useState<string | null>(null);
   const [inviteDraft, setInviteDraft] = useState<string | null>(null);
+  const [autoOffDraft, setAutoOffDraft] = useState<string | null>(null);
   const [soundReady, setSoundReady] = useState(true);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [sound, setSound] = useState(readSoundPref);
@@ -460,6 +461,15 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
     }
   }
 
+  async function saveAutoOff(value: string) {
+    try {
+      await saveSettings({ autoOffAt: value });
+      setAutoOffDraft(null);
+    } catch {
+      return;
+    }
+  }
+
   async function saveSettings(body: Partial<LiveSettings>) {
     try {
       setSettings(await adminFetch<LiveSettings>("/live/settings", { method: "PUT", body }));
@@ -624,6 +634,33 @@ function LiveManager({ onSignOut }: { onSignOut: () => void }) {
                   ))}
                 </div>
                 <span className="min-h-10 text-sm text-muted-foreground">{siteState}</span>
+              </div>
+              <div className="flex flex-col gap-1.5 border-t pt-3 text-sm">
+                <label htmlFor="live-auto-off" className="font-medium">
+                  {t.live.autoOff}
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    id="live-auto-off"
+                    type="time"
+                    className="w-32"
+                    value={autoOffDraft ?? settings?.autoOffAt ?? ""}
+                    disabled={!settings}
+                    onChange={(event) => setAutoOffDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && autoOffDraft !== null) void saveAutoOff(autoOffDraft);
+                    }}
+                  />
+                  <Button variant="secondary" disabled={autoOffDraft === null || autoOffDraft === (settings?.autoOffAt ?? "")} onClick={() => autoOffDraft !== null && void saveAutoOff(autoOffDraft)}>
+                    {t.common.save}
+                  </Button>
+                  {settings?.autoOffAt ? (
+                    <Button variant="ghost" size="icon" aria-label={t.live.autoOffClear} title={t.live.autoOffClear} onClick={() => void saveAutoOff("")}>
+                      <X className="size-4" />
+                    </Button>
+                  ) : null}
+                </div>
+                <span className="text-xs text-muted-foreground">{settings?.autoOffAt ? t.live.autoOffOn.replace("{time}", settings.autoOffAt) : t.live.autoOffOff}</span>
               </div>
               <div className="flex flex-col gap-1.5 border-t pt-3 text-sm">
                 <label htmlFor="live-host-name" className="font-medium">

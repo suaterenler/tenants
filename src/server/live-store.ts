@@ -2,12 +2,12 @@ import "server-only";
 import { randomInt, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { emptyAppearance, inviteCode, parseAppearance, type LiveMessage, type LiveParticipant, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
+import { emptyAppearance, inviteCode, isAutoOffDue, parseAppearance,type LiveMessage, type LiveParticipant, type LiveSession, type LiveSessionPatch, type LiveSettings } from "@/lib/live";
 
 type LiveData = { settings: LiveSettings; sessions: LiveSession[] };
 
 function defaultSettings(): LiveSettings {
-  return { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım", inviteBase: "", visibility: "always", appearance: emptyAppearance() };
+  return { available: false, approveJoin: true, guestShare: true, hostName: "Erenler Yazılım", inviteBase: "", visibility: "always", appearance: emptyAppearance(), autoOffAt: "", availableSince: null };
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -85,7 +85,20 @@ export async function getSettings(): Promise<LiveSettings> {
 
 export function updateSettings(patch: Partial<LiveSettings>): Promise<LiveSettings> {
   return mutate((data) => {
-    data.settings = { ...data.settings, ...patch };
+    const before = data.settings;
+    const next = { ...before, ...patch };
+    if (!next.available) next.availableSince = null;
+    else if (!before.available || !next.availableSince || next.autoOffAt !== before.autoOffAt) next.availableSince = new Date().toISOString();
+    data.settings = next;
+    return next;
+  });
+}
+
+export async function applyAutoOff(now: Date): Promise<LiveSettings | null> {
+  if (!isAutoOffDue(await getSettings(), now)) return null;
+  return mutate((data) => {
+    if (!isAutoOffDue(data.settings, now)) return null;
+    data.settings = { ...data.settings, available: false, availableSince: null };
     return data.settings;
   });
 }

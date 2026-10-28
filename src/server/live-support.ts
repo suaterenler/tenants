@@ -4,8 +4,8 @@ import { rm } from "node:fs/promises";
 import path from "node:path";
 import { LIVE_DELETED_KEEP_DAYS, type LiveSession } from "@/lib/live";
 import { adminEmail, publicUrl, sendMail } from "./mail";
-import { adminOnline, setMissedHandler } from "./live-hub";
-import { dataDir, dueReminders, purgeDeleted } from "./live-store";
+import { adminOnline, emitAdmin, setMissedHandler } from "./live-hub";
+import { applyAutoOff, dataDir, dueReminders, purgeDeleted } from "./live-store";
 import { sendPush } from "./live-push";
 
 export type IceServer = { urls: string | string[]; username?: string; credential?: string };
@@ -138,4 +138,11 @@ export function startLiveJobs(): void {
   };
   setInterval(purge, 60 * 60 * 1000);
   purge();
+  setInterval(() => void enforceAutoOff(), 30 * 1000);
+  void enforceAutoOff();
+}
+
+export async function enforceAutoOff(): Promise<void> {
+  const settings = await applyAutoOff(new Date());
+  if (settings) emitAdmin("settings", settings);
 }

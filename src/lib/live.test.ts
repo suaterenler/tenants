@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanEmail, cleanName, formatPhone, isValidPhone, cleanPage, cleanPhone, durationMinutes, initials, inviteCode, isInviteCode, isReminderDue, liveBadgeCount, parseSessionPatch, previousSessions, type LiveSession } from "./live";
+import { cleanEmail, cleanName, cleanTime, formatPhone, isValidPhone, cleanPage, cleanPhone, durationMinutes, initials, inviteCode, isAutoOffDue, isInviteCode, isReminderDue, liveBadgeCount, parseSessionPatch, previousSessions, type LiveSession } from "./live";
 
 function session(overrides: Partial<LiveSession>): LiveSession {
   return {
@@ -107,5 +107,35 @@ describe("phone formatting", () => {
     expect(formatPhone("2161234567")).toBe("216 123 45 67");
     for (const value of ["532 123 45 67", "0 532 123 45 67", "+90 532 123 45 67", "212 123 45 67", "0 216 123 45 67", "+4915112345678"]) expect(isValidPhone(value)).toBe(true);
     for (const value of ["532", "123 456 78 90", "0 532 12"]) expect(isValidPhone(value)).toBe(false);
+  });
+});
+
+describe("auto off", () => {
+  it("accepts empty or HH:MM time", () => {
+    expect(cleanTime("")).toBe("");
+    expect(cleanTime(" 22:00 ")).toBe("22:00");
+    expect(cleanTime("24:00")).toBeNull();
+    expect(cleanTime("9:00")).toBeNull();
+    expect(cleanTime(5)).toBeNull();
+  });
+
+  it("closes at the first cutoff after becoming available", () => {
+    const settings = { available: true, autoOffAt: "22:00", availableSince: "2026-10-28T06:00:00.000Z" };
+    expect(isAutoOffDue(settings, new Date("2026-10-28T18:59:00.000Z"))).toBe(false);
+    expect(isAutoOffDue(settings, new Date("2026-10-28T19:00:00.000Z"))).toBe(true);
+    expect(isAutoOffDue(settings, new Date("2026-10-30T08:00:00.000Z"))).toBe(true);
+  });
+
+  it("waits until the next day when opened after the cutoff", () => {
+    const settings = { available: true, autoOffAt: "22:00", availableSince: "2026-10-28T20:00:00.000Z" };
+    expect(isAutoOffDue(settings, new Date("2026-10-28T21:30:00.000Z"))).toBe(false);
+    expect(isAutoOffDue(settings, new Date("2026-10-29T18:59:00.000Z"))).toBe(false);
+    expect(isAutoOffDue(settings, new Date("2026-10-29T19:00:00.000Z"))).toBe(true);
+  });
+
+  it("never closes without a time or when not available", () => {
+    const now = new Date("2026-10-29T19:00:00.000Z");
+    expect(isAutoOffDue({ available: true, autoOffAt: "", availableSince: "2026-10-28T06:00:00.000Z" }, now)).toBe(false);
+    expect(isAutoOffDue({ available: false, autoOffAt: "22:00", availableSince: null }, now)).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { rateLimited, readBody } from "@/server/auth";
 import { emitAdmin, issueRequestToken } from "@/server/live-hub";
 import { createSession, getSettings, listSessions, updateSession } from "@/server/live-store";
-import { corsJson, mailIfAdminOffline, mailSession, preflight, pushSession, startLiveJobs } from "@/server/live-support";
+import { corsJson, enforceAutoOff, mailIfAdminOffline, mailSession, preflight, pushSession, startLiveJobs } from "@/server/live-support";
 import { cleanEmail, cleanName, cleanNote, cleanPage, cleanPhone, LIVE_QUEUE_SECONDS } from "@/lib/live";
 
 export function OPTIONS(request: Request) {
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
   const email = cleanEmail(body.email);
   if (!name) return corsJson(request, { error: "nameRequired" }, 400);
   if (mode === "callback" && !phone) return corsJson(request, { error: "phoneRequired" }, 400);
+  await enforceAutoOff();
   const settings = await getSettings();
   if (mode === "call" && !settings.available) return corsJson(request, { error: "unavailable" }, 409);
   const page = cleanPage(body.page);

@@ -1,11 +1,13 @@
 import { fail, ok, readBody, requireSession } from "@/server/auth";
 import { emitAdmin, hostInCall } from "@/server/live-hub";
 import { getSettings, updateSettings } from "@/server/live-store";
-import { cleanInviteBase, cleanName, LIVE_VISIBILITIES, parseAppearance, type LiveSettings, type LiveVisibility } from "@/lib/live";
+import { enforceAutoOff } from "@/server/live-support";
+import { cleanInviteBase, cleanName, cleanTime, LIVE_VISIBILITIES, parseAppearance, type LiveSettings, type LiveVisibility } from "@/lib/live";
 
 export async function GET(request: Request) {
   const denied = await requireSession(request);
   if (denied) return denied;
+  await enforceAutoOff();
   return ok({ ...(await getSettings()), busy: hostInCall() });
 }
 
@@ -26,6 +28,11 @@ export async function PUT(request: Request) {
     const inviteBase = cleanInviteBase(body.inviteBase);
     if (inviteBase === null) return fail("invalidRecord", 400);
     patch.inviteBase = inviteBase;
+  }
+  if (body.autoOffAt !== undefined) {
+    const autoOffAt = cleanTime(body.autoOffAt);
+    if (autoOffAt === null) return fail("invalidRecord", 400);
+    patch.autoOffAt = autoOffAt;
   }
   if (body.visibility !== undefined) {
     if (typeof body.visibility !== "string" || !LIVE_VISIBILITIES.includes(body.visibility as LiveVisibility)) return fail("invalidRecord", 400);
